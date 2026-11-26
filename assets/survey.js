@@ -196,12 +196,16 @@
 
   function collect() {
     var errors = [];
+    // 每次重新檢查前先清除上一次的錯誤標示
+    form.querySelectorAll('.invalid').forEach(function (n) { n.classList.remove('invalid'); });
+    form.querySelectorAll('.group-invalid').forEach(function (n) { n.classList.remove('group-invalid'); });
+
     var dept = deptSel.value;
     var nameEl = document.getElementById('name');
     var name = nameEl.value.replace(/\s+/g, ' ').trim();
 
-    if (!dept) { deptSel.classList.add('invalid'); errors.push({ node: deptSel, msg: '請選擇部門' }); }
-    if (!name) { nameEl.classList.add('invalid'); errors.push({ node: nameEl, msg: '請填寫姓名' }); }
+    if (CFG.departments.indexOf(dept) < 0) { deptSel.classList.add('invalid'); errors.push({ node: deptSel, msg: '請選擇部門' }); }
+    if (!/[\p{L}]/u.test(name)) { nameEl.classList.add('invalid'); errors.push({ node: nameEl, msg: '請填寫姓名' }); }
 
     var tools = [];
     toolList.querySelectorAll('.tool').forEach(function (card) {

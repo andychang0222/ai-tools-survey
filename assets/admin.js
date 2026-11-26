@@ -13,9 +13,22 @@
   C.applyConfig();
   if (!C.apiReady()) { $('configAlert').hidden = false; $('loginBtn').disabled = true; }
 
-  // 部門篩選選單
-  $('deptFilter').appendChild(el('option', { value: '', text: '全部部門' }));
-  CFG.departments.forEach(function (d) { $('deptFilter').appendChild(el('option', { value: d, text: d })); });
+  // 部門清單：設定檔的部門，再加上資料裡出現、但設定檔沒有的部門（例如日後改過部門名稱）
+  function deptList() {
+    var list = CFG.departments.slice();
+    all.forEach(function (r) { if (list.indexOf(r.dept) < 0) list.push(r.dept); });
+    return list;
+  }
+
+  function buildDeptOptions() {
+    var sel = $('deptFilter');
+    var cur = sel.value;
+    sel.textContent = '';
+    sel.appendChild(el('option', { value: '', text: '全部部門' }));
+    deptList().forEach(function (d) { sel.appendChild(el('option', { value: d, text: d })); });
+    sel.value = deptList().indexOf(cur) >= 0 ? cur : '';
+  }
+  buildDeptOptions();
 
   // 圖例
   CFG.statuses.forEach(function (s, i) {
@@ -25,48 +38,84 @@
   });
 
   /* ---------- 登入與載入 ---------- */
+  var reqSeq = 0;          // 每次登出或重新載入都遞增，舊請求回來時直接丟棄
+  var idleTimer = null;
+  var IDLE_MS = 30 * 60 * 1000; // 30 分鐘沒有操作自動登出
+
+  function showLoginError(msg) {
+    $('loginError').textContent = msg;
+    $('loginError').hidden = !msg;
+  }
+
   function load() {
+    var seq = ++reqSeq;
     $('loginBtn').disabled = true;
     $('reloadBtn').disabled = true;
-    $('loginError').hidden = true;
+    showLoginError('');
     return C.callApi({ action: 'stats', password: password }).then(function (res) {
-      if (!res || !res.ok) throw new Error((res && res.error) || '讀取失敗');
+      if (seq !== reqSeq) return;
+      if (!res || !res.ok) {
+        var e = new Error((res && res.error) || '讀取失敗');
+        e.auth = !!(res && res.error && /密碼/.test(res.error));
+        throw e;
+      }
       all = Array.isArray(res.responses) ? res.responses : [];
+      buildDeptOptions();
       $('updatedAt').textContent = '資料時間：' + C.formatTime(res.time);
       $('loginView').hidden = true;
       $('statsView').hidden = false;
       $('introText').textContent = '同部門同姓名以最後一次填寫為準。本頁含同仁姓名，請勿截圖外流。';
       render();
+      resetIdle();
     }).catch(function (err) {
-      if ($('statsView').hidden) {
-        password = '';
-        $('loginError').textContent = err.message;
-        $('loginError').hidden = false;
+      if (seq !== reqSeq) return;
+      if ($('statsView').hidden || err.auth) {
+        // 登入失敗，或重新整理時密碼已失效：清掉記憶體中的密碼，避免重複送出舊密碼造成鎖定
+        logout(err.message);
       } else {
         $('updatedAt').textContent = '重新整理失敗：' + err.message;
       }
     }).finally(function () {
+      if (seq !== reqSeq) return;
       $('loginBtn').disabled = !C.apiReady();
       $('reloadBtn').disabled = false;
     });
   }
 
+  function logout(msg) {
+    reqSeq++;
+    password = '';
+    all = [];
+    clearTimeout(idleTimer);
+    ['kpis', 'toolTable', 'deptTable', 'freqTable', 'purposeTable', 'otherTable', 'listTable', 'updatedAt', 'listCount'].forEach(function (id) { $(id).textContent = ''; });
+    $('deptFilter').value = '';
+    $('search').value = '';
+    $('statsView').hidden = true;
+    $('loginView').hidden = false;
+    $('loginBtn').disabled = !C.apiReady();
+    $('reloadBtn').disabled = false;
+    showLoginError(msg || '');
+    $('pw').focus();
+  }
+
+  function resetIdle() {
+    clearTimeout(idleTimer);
+    if (!password) return;
+    idleTimer = setTimeout(function () { logout('閒置超過 30 分鐘，已自動登出。'); }, IDLE_MS);
+  }
+  ['click', 'keydown', 'scroll'].forEach(function (ev) {
+    document.addEventListener(ev, function () { if (!$('statsView').hidden) resetIdle(); }, { passive: true });
+  });
+
   $('loginForm').addEventListener('submit', function (e) {
     e.preventDefault();
     password = $('pw').value;
     $('pw').value = '';
-    if (!password) return;
+    if (!password) { showLoginError('請輸入管理密碼'); return; }
     load();
   });
   $('reloadBtn').addEventListener('click', load);
-  $('logoutBtn').addEventListener('click', function () {
-    password = '';
-    all = [];
-    ['kpis', 'toolTable', 'deptTable', 'freqTable', 'purposeTable', 'otherTable', 'listTable'].forEach(function (id) { $(id).textContent = ''; });
-    $('statsView').hidden = true;
-    $('loginView').hidden = false;
-    $('pw').focus();
-  });
+  $('logoutBtn').addEventListener('click', function () { logout(''); });
   $('deptFilter').addEventListener('change', render);
   $('search').addEventListener('input', renderList);
   $('csvBtn').addEventListener('click', exportCsv);
@@ -82,6 +131,24 @@
   function toolKey(t) { return t.other ? 'other' : t.id; }
 
   function statusIndex(s) { return CFG.statuses.indexOf(s); }
+
+  // 取某人對某工具的需求（統計一律以人數計）。
+  // 「其他」一人可填多項：合併成一筆，使用狀況取最高（付費 > 免費 > 尚未使用）、頻率取最頻繁、用途取聯集
+  function personTool(r, defId) {
+    var ts = needed(r).filter(function (t) { return toolKey(t) === defId; });
+    if (!ts.length) return null;
+    var out = { status: '', frequency: '', purposes: [], purposeOther: '' };
+    var si = -1, fi = Infinity;
+    ts.forEach(function (t) {
+      var s = statusIndex(t.status);
+      if (s > si) { si = s; out.status = t.status; }
+      var f = CFG.frequencies.indexOf(t.frequency);
+      if (f >= 0 && f < fi) { fi = f; out.frequency = t.frequency; }
+      (t.purposes || []).forEach(function (p) { if (out.purposes.indexOf(p) < 0) out.purposes.push(p); });
+      if (t.purposeOther) out.purposeOther = t.purposeOther;
+    });
+    return out;
+  }
 
   /* ---------- 表格工具 ---------- */
   function table(headers, rows, numFrom) {
@@ -99,14 +166,18 @@
     return el('table', { className: 'data' }, [thead, tbody]);
   }
 
-  function heatTable(headers, rows, numFrom) {
+  // heatFrom～heatTo 為上色的欄位範圍（不含「填答人數」「合計」這類總數欄，避免壓低色階）
+  function heatTable(headers, rows, numFrom, heatFrom, heatTo) {
+    if (heatFrom === undefined) heatFrom = numFrom;
+    if (heatTo === undefined) heatTo = headers.length - 1;
+    var inRange = function (i) { return i >= heatFrom && i <= heatTo; };
     var max = 0;
-    rows.forEach(function (r) { r.forEach(function (c, i) { if (i >= numFrom && typeof c === 'number' && c > max) max = c; }); });
+    rows.forEach(function (r) { r.forEach(function (c, i) { if (inRange(i) && typeof c === 'number' && c > max) max = c; }); });
     var t = table(headers, rows, numFrom);
     t.querySelectorAll('tbody tr').forEach(function (tr, ri) {
       tr.querySelectorAll('td').forEach(function (td, ci) {
         var v = rows[ri][ci];
-        if (ci < numFrom || typeof v !== 'number') return;
+        if (!inRange(ci) || typeof v !== 'number') return;
         var level = v === 0 || max === 0 ? 0 : Math.max(1, Math.ceil((v / max) * 4));
         td.classList.add('heat-' + level);
       });
@@ -154,7 +225,7 @@
     });
     var kpis = [
       ['填答人數', rs.length, '人'],
-      ['已填答部門', Object.keys(deptSet).length, '／ ' + ($('deptFilter').value ? 1 : CFG.departments.length) + ' 個部門'],
+      ['已填答部門', Object.keys(deptSet).length, '／ ' + ($('deptFilter').value ? 1 : deptList().length) + ' 個部門'],
       ['需要 AI 工具', anyNeed, '人（至少一項）'],
       ['已在使用', anyUsing, '人（至少一項）'],
       ['付費使用中', paidCount, '人次']
@@ -168,14 +239,15 @@
       ]));
     });
 
-    // 一、各工具需求與使用狀況（「其他」依人數計，一人填多個其他工具只算一次需求）
+    // 一、各工具需求與使用狀況（全部以人數計；「其他」一人填多項只算一人，見 personTool）
     var toolRows = toolDefs.map(function (def) {
       var people = 0;
       var st = [0, 0, 0];
       rs.forEach(function (r) {
-        var ts = needed(r).filter(function (t) { return toolKey(t) === def.id; });
-        if (ts.length) people++;
-        ts.forEach(function (t) { var i = statusIndex(t.status); if (i >= 0) st[i]++; });
+        var t = personTool(r, def.id);
+        if (!t) return;
+        people++;
+        var i = statusIndex(t.status); if (i >= 0) st[i]++;
       });
       return { name: def.name, people: people, st: st };
     });
@@ -189,45 +261,39 @@
       }), 2));
 
     // 二、部門 × 工具
-    var depts = $('deptFilter').value ? [$('deptFilter').value] : CFG.departments;
+    var depts = $('deptFilter').value ? [$('deptFilter').value] : deptList();
     put('deptTable', heatTable(
       ['部門', '填答人數'].concat(toolDefs.map(function (d) { return d.id === 'other' ? '其他' : d.name; })),
       depts.map(function (dept) {
         var drs = rs.filter(function (r) { return r.dept === dept; });
         return [dept, drs.length].concat(toolDefs.map(function (def) {
-          return drs.filter(function (r) { return needed(r).some(function (t) { return toolKey(t) === def.id; }); }).length;
+          return drs.filter(function (r) { return !!personTool(r, def.id); }).length;
         }));
-      }), 1));
+      }), 1, 2));
 
-    // 三、頻率
+    // 三、頻率（人數）
     put('freqTable', heatTable(
       ['工具'].concat(CFG.frequencies),
       toolDefs.map(function (def) {
         return [def.name].concat(CFG.frequencies.map(function (f) {
-          var c = 0;
-          rs.forEach(function (r) { needed(r).forEach(function (t) { if (toolKey(t) === def.id && t.frequency === f) c++; }); });
-          return c;
+          return rs.filter(function (r) { var t = personTool(r, def.id); return t && t.frequency === f; }).length;
         }));
       }), 1));
 
-    // 四、用途
+    // 四、用途（人數，可複選）
     var purposeRows = CFG.purposes.concat(['其他']).map(function (p) {
       return [p].concat(toolDefs.map(function (def) {
-        var c = 0;
-        rs.forEach(function (r) {
-          needed(r).forEach(function (t) {
-            if (toolKey(t) !== def.id) return;
-            if (p === '其他' ? !!t.purposeOther : (t.purposes || []).indexOf(p) >= 0) c++;
-          });
-        });
-        return c;
+        return rs.filter(function (r) {
+          var t = personTool(r, def.id);
+          return t && (p === '其他' ? !!t.purposeOther : t.purposes.indexOf(p) >= 0);
+        }).length;
       }));
     });
     purposeRows.forEach(function (row) { row.push(row.slice(1).reduce(function (a, b) { return a + b; }, 0)); });
     purposeRows.sort(function (a, b) { return b[b.length - 1] - a[a.length - 1]; });
     put('purposeTable', heatTable(
       ['用途'].concat(toolDefs.map(function (d) { return d.id === 'other' ? '其他工具' : d.name; })).concat(['合計']),
-      purposeRows, 1));
+      purposeRows, 1, 1, toolDefs.length));
 
     // 五、其他工具名稱彙整、其他用途
     var others = {};
@@ -266,7 +332,7 @@
   function renderList() {
     var q = $('search').value.replace(/\s+/g, '').toLowerCase();
     var order = {};
-    CFG.departments.forEach(function (d, i) { order[d] = i; });
+    deptList().forEach(function (d, i) { order[d] = i; });
     var rs = filtered().filter(function (r) {
       if (!q) return true;
       var hay = (r.name + needed(r).map(function (t) { return t.name; }).join('')).replace(/\s+/g, '').toLowerCase();
@@ -292,7 +358,7 @@
   /* ---------- 匯出 CSV（Excel 可直接開啟） ---------- */
   function csvCell(v) {
     var s = String(v === undefined || v === null ? '' : v);
-    if (/^[=+\-@\t\r]/.test(s)) s = "'" + s;
+    if (/^\s*[=+\-@＝＋－＠|']/.test(s)) s = "'" + s;
     return '"' + s.replace(/"/g, '""') + '"';
   }
 
@@ -304,7 +370,7 @@
           (t.purposes || []).join('、'), t.purposeOther || '', t.frequency || '', t.status || '', r.comment || '', C.formatTime(r.time)]);
       });
     });
-    var csv = '﻿' + lines.map(function (l) { return l.map(csvCell).join(','); }).join('\r\n');
+    var csv = String.fromCharCode(0xFEFF) + lines.map(function (l) { return l.map(csvCell).join(','); }).join('\r\n');
     var url = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' }));
     var d = new Date();
     var stamp = d.getFullYear() + String(d.getMonth() + 1).padStart(2, '0') + String(d.getDate()).padStart(2, '0');
