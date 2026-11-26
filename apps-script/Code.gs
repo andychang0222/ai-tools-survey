@@ -1,49 +1,319 @@
 /**
- * 八貫企業股份有限公司 AI 工具使用需求調查：Google Apps Script 後端
+ * 八貫企業股份有限公司（Cathay Consolidated, Inc）
+ * AI 工具使用現況與需求調查：Google Apps Script 後端
  *
- * 部署方式：見專案 README.md
- * - 本程式需綁定在 Google 試算表上（試算表 → 擴充功能 → Apps Script）。
- * - 管理密碼存放在「專案設定 → 指令碼屬性」，屬性名稱 ADMIN_PASSWORD，不寫在程式碼裡。
- * - 下方選項必須與網頁 assets/config.js 一致。
+ * ※ 本檔由 apps-script/build.js 自動產生，請勿直接修改。
+ *   題目請改 assets/schema.js，後端請改 apps-script/server.gs，再執行 node apps-script/build.js。
+ *
+ * 部署方式見 README.md。管理密碼放在「專案設定 → 指令碼屬性」的 ADMIN_PASSWORD。
  */
 
-var DEPARTMENTS = [
-  '董事長室', '工程一部', '行政部', '品保一部', '業務部', '製造一部', '資材一部',
-  '工程三部', '製造三部', '品保三部', '資材三部', '會計部', '財務部', '總經理室'
-];
+/*
+ * 問卷題目定義與驗證規則（填答頁與 Google Apps Script 後端共用同一份）
+ * 修改題目後，請執行 `node apps-script/build.js` 重新產生 apps-script/Code.gs，
+ * 再把 Code.gs 貼到 Apps Script 並重新部署。
+ * 注意：本檔需同時能在瀏覽器與 Apps Script（V8）執行，請只用 ES5 語法加上 Array 方法。
+ */
+var SurveySchema = (function () {
+  'use strict';
 
-var TOOLS = [
-  { id: 'chatgpt', name: 'ChatGPT' },
-  { id: 'claude', name: 'Claude' },
-  { id: 'gemini', name: 'Gemini' },
-  { id: 'copilot', name: 'Microsoft 365 Copilot' }
-];
+  var DEPARTMENTS = [
+    '董事長室', '工程一部', '行政部', '品保一部', '業務部', '製造一部', '資材一部',
+    '工程三部', '製造三部', '品保三部', '資材三部', '會計部', '財務部', '總經理室'
+  ];
 
-var PURPOSES = [
-  '文書撰寫與潤飾', '翻譯', '資料分析與報表', '會議記錄與摘要',
-  '簡報製作', '郵件與客戶溝通', '資料搜尋與查詢', '程式開發與自動化',
-  '圖片與設計'
-];
+  // 各工具的方案；以「免費」開頭或「不清楚」視為非付費方案
+  var TOOLS = [
+    { id: 'chatgpt', name: 'ChatGPT', vendor: 'OpenAI',
+      plans: ['免費版', 'Plus', 'Pro', 'Business（原 Team）', 'Enterprise', '不清楚'] },
+    { id: 'claude', name: 'Claude', vendor: 'Anthropic',
+      plans: ['免費版', 'Pro', 'Max', 'Team', 'Enterprise', '不清楚'] },
+    { id: 'gemini', name: 'Gemini', vendor: 'Google',
+      plans: ['免費版', 'Google AI Pro', 'Google AI Ultra', 'Google Workspace 方案內含', '不清楚'] },
+    { id: 'copilot', name: 'Microsoft 365 Copilot', vendor: 'Microsoft，含 Edge／Bing 的 Copilot',
+      plans: ['免費版（Edge、Bing 或 Copilot App）', 'Microsoft 365 Copilot（公司授權）', '個人付費版（Microsoft 365 個人／家用版、Copilot Pro）', '不清楚'] }
+  ];
+  var OTHER_PLANS = ['免費版', '付費版', '不清楚'];
+  var MAX_OTHER_TOOLS = 3;
+  var PAYERS = ['自己付費', '公司付費', '不清楚'];
+  var ACCOUNTS = ['公司 Email', '個人 Email', '沒有登入'];
+  var TOOL_FREQ = ['每天多次', '每天一次', '每週數次', '每週一次', '每月數次'];
 
-var FREQUENCIES = ['每天多次', '每天一次', '每週數次', '每週一次', '每月數次', '偶爾使用'];
-var STATUSES = ['尚未使用', '使用中－免費版', '使用中－付費版'];
-var MAX_OTHER_TOOLS = 5;
+  var TASKS = [
+    '文件撰寫與潤飾', 'Email 撰寫與回覆', '翻譯', '會議記錄與摘要',
+    '閱讀與摘要長文件（規格書、合約、報告）', '資料分析、Excel 公式與報表', '簡報製作',
+    '查詢資料與研究', '程式、VBA、巨集或系統設定', '圖片或圖表設計',
+    '報價、客戶或業務文件', '品質、技術或製程文件', '學習新知、問答'
+  ];
+
+  var USING = ['經常使用（每週數次以上）', '偶爾使用'];
+  var IS_USER = { q: 'usage', in: USING };
+
+  var SECTIONS = [
+    {
+      id: 'basic', title: '基本資料', desc: '只用來統計部門需求，不會要求任何帳號或員工編號。',
+      questions: [
+        { id: 'dept', type: 'select', label: '部門', short: '部門', options: DEPARTMENTS, required: true },
+        { id: 'name', type: 'text', label: '姓名', short: '姓名', max: 20, required: true, letter: true, placeholder: '請填寫中文全名' },
+        { id: 'role', type: 'radio', label: '職務', short: '職務', options: ['主管職', '非主管職'], required: true },
+        { id: 'pcTime', type: 'radio', label: '工作中使用電腦的時間', short: '使用電腦的時間', options: ['大部分時間', '大約一半', '很少'], required: true }
+      ]
+    },
+    {
+      id: 'current', title: '使用現況', desc: '請依你「目前工作上」的實際情況回答，沒有標準答案。',
+      questions: [
+        { id: 'familiarity', type: 'radio', label: '你對 AI 工具的熟悉程度', short: '熟悉程度', required: true,
+          options: ['沒用過', '聽過，但很少用', '會用來問問題、寫東西', '能熟練運用在工作上', '能教別人使用'] },
+        { id: 'usage', type: 'radio', label: '目前工作上使用 AI 的情況', short: '使用情況', required: true,
+          options: USING.concat(['曾經試用，現在沒在用', '從未使用']) },
+        { id: 'notUsingReasons', type: 'checkbox', label: '沒有使用或停用的原因', short: '沒有使用的原因', hint: '可複選', required: true, other: true,
+          showIf: { q: 'usage', in: ['曾經試用，現在沒在用', '從未使用'] },
+          options: ['不知道怎麼用', '不確定公司是否允許', '擔心公司資料外洩', '工作上用不到', '覺得結果不可靠', '要付費', '公司網路或電腦無法使用'] },
+        { id: 'tools', type: 'tools', label: '目前使用哪些 AI 工具', short: '使用的工具', hint: '可複選，選了之後請填方案與使用頻率', required: true, showIf: IS_USER },
+        { id: 'devices', type: 'checkbox', label: '通常在哪裡使用 AI', short: '使用裝置', hint: '可複選', required: true, showIf: IS_USER,
+          options: ['公司電腦', '個人電腦', '個人手機', '公司手機或平板'] },
+        { id: 'tasks', type: 'checkbox', label: '目前用 AI 協助哪些工作', short: '目前用途', hint: '可複選', required: true, other: true, showIf: IS_USER, options: TASKS },
+        { id: 'example', type: 'textarea', label: '舉一個 AI 幫你最多的實際例子', short: '實際例子', hint: '選填', max: 300, showIf: IS_USER,
+          placeholder: '例如：把客戶的英文規格書整理成中文重點，原本要一小時，現在十分鐘' },
+        { id: 'timeSaved', type: 'radio', label: '使用 AI 後，每週大約節省多少工作時間', short: '節省時間', required: true, showIf: IS_USER,
+          options: ['不到 1 小時', '1～3 小時', '3～5 小時', '5 小時以上', '說不上來'] }
+      ]
+    },
+    {
+      id: 'security', title: '資料安全', showIf: IS_USER,
+      desc: '這部分用來規劃資料保護措施與教育訓練，不會追究個人責任，請依實際情況填寫。',
+      questions: [
+        { id: 'dataTypes', type: 'checkbox', label: '曾經輸入或上傳到 AI 的資料', short: '輸入過的資料', hint: '可複選', required: true,
+          exclusive: '只有公開資料或與公司無關的內容',
+          options: ['只有公開資料或與公司無關的內容', '一般內部文件（會議記錄、內部通知）', '客戶資料（名稱、聯絡人、訂單）', '報價、價格或成本',
+            '產品配方、規格、圖面或製程參數', '財務或會計資料', '員工個人資料', '程式碼、系統設定或帳號密碼'] },
+        { id: 'trainingAware', type: 'radio', label: '你知道 AI 服務可能保存對話內容，甚至用來訓練模型嗎？', short: '資料保存設定', required: true,
+          options: ['知道，而且已關閉相關設定', '知道，但沒有特別設定', '不知道'] },
+        { id: 'verify', type: 'radio', label: '使用 AI 產出的內容前，你會查核正確性嗎？', short: '查核習慣', required: true,
+          options: ['每次都會', '重要的才會', '很少查核'] }
+      ]
+    },
+    {
+      id: 'needs', title: '需求與期望', desc: '公司會依大家的需求，規劃授權採購、教育訓練與使用規範。',
+      questions: [
+        { id: 'wantTools', type: 'checkbox', label: '希望公司提供或授權哪些 AI 工具', short: '希望提供的工具', hint: '可複選', required: true, other: true,
+          exclusive: '目前不需要', options: ['ChatGPT', 'Claude', 'Gemini', 'Microsoft 365 Copilot', '目前不需要'] },
+        { id: 'wantFrequency', type: 'radio', label: '如果公司提供，你預計多久使用一次', short: '預計使用頻率', required: true,
+          showIf: { q: 'wantTools', anyExcept: '目前不需要' }, options: TOOL_FREQ.concat(['偶爾']) },
+        { id: 'futureTasks', type: 'checkbox', label: '希望 AI 協助哪些工作', short: '希望的用途', hint: '可複選，可以和目前的用途相同', required: true, other: true, options: TASKS },
+        { id: 'support', type: 'checkbox', label: '希望公司提供哪些支援', short: '希望的支援', hint: '可複選', required: true, other: true,
+          exclusive: '不需要',
+          options: ['統一採購企業版帳號', 'AI 教育訓練課程', 'AI 使用規範與資安指引', '各部門使用案例與範本', '專人諮詢窗口', '不需要'] },
+        { id: 'policy', type: 'radio', label: '你認為公司應該怎麼管理 AI 的使用', short: '管理方式', required: true,
+          options: ['統一提供工具，並明訂使用規範', '提供指引，讓同仁自行選擇工具', '不需要特別規範', '沒有意見'] },
+        { id: 'comment', type: 'textarea', label: '其他意見或建議', short: '其他意見', hint: '選填', max: 500,
+          placeholder: '例如：希望開哪些課程、擔心什麼、想要什麼功能' }
+      ]
+    }
+  ];
+
+  /* ---------- 工具函式 ---------- */
+
+  function cleanText(s, max, multiline) {
+    if (typeof s !== 'string') return '';
+    if (multiline) {
+      s = s.replace(/\r\n?/g, '\n').replace(/[\u0000-\u0009\u000B-\u001F\u007F]/g, '')
+        .replace(/[ \t]+/g, ' ').replace(/\n{3,}/g, '\n\n');
+    } else {
+      s = s.replace(/[\u0000-\u001F\u007F]/g, ' ').replace(/\s+/g, ' ');
+    }
+    return s.trim().slice(0, max);
+  }
+
+  function nameKey(s) { return String(s).replace(/\s+/g, '').toLowerCase(); }
+
+  function isPaidPlan(plan) { return !!plan && plan.indexOf('免費') !== 0 && plan !== '不清楚'; }
+
+  function findTool(id) {
+    for (var i = 0; i < TOOLS.length; i++) if (TOOLS[i].id === id) return TOOLS[i];
+    return null;
+  }
+
+  function cond(c, data) {
+    var v = data[c.q];
+    if (c['in']) return c['in'].indexOf(v) >= 0;
+    if (c.anyExcept) {
+      return (Array.isArray(v) && v.some(function (x) { return x !== c.anyExcept; })) || !!data[c.q + 'Other'];
+    }
+    return true;
+  }
+
+  function emptyValue(q) {
+    if (q.type === 'checkbox' || q.type === 'tools') return [];
+    return '';
+  }
+
+  /* ---------- 驗證 ----------
+   * 回傳 { data, errors, sections }
+   * - data：清理後、只含目前可見題目的資料（隱藏題目一律清空）
+   * - errors：[{ id, msg, tool?, field? }]
+   * - sections：[{ id, visible, total, done }]（必填題的完成進度）
+   */
+  function validate(raw) {
+    raw = raw && typeof raw === 'object' ? raw : {};
+    var data = {};
+    var errors = [];
+    var sections = [];
+
+    SECTIONS.forEach(function (sec) {
+      var secVisible = !sec.showIf || cond(sec.showIf, data);
+      var stat = { id: sec.id, visible: secVisible, total: 0, done: 0, questions: [] };
+
+      sec.questions.forEach(function (q) {
+        var visible = secVisible && (!q.showIf || cond(q.showIf, data));
+        stat.questions.push({ id: q.id, visible: visible });
+        if (!visible) {
+          data[q.id] = emptyValue(q);
+          if (q.other) data[q.id + 'Other'] = '';
+          return;
+        }
+        var before = errors.length;
+        checkQuestion(q, raw, data, errors);
+        if (q.required) {
+          stat.total++;
+          if (errors.length === before) stat.done++;
+        }
+      });
+      sections.push(stat);
+    });
+
+    return { data: data, errors: errors, sections: sections };
+  }
+
+  function checkQuestion(q, raw, data, errors) {
+    var label = q.short || q.label;
+    var v = raw[q.id];
+
+    if (q.type === 'select' || q.type === 'radio') {
+      v = typeof v === 'string' ? v : '';
+      if (v && q.options.indexOf(v) < 0) v = '';
+      data[q.id] = v;
+      if (q.required && !v) errors.push({ id: q.id, msg: label + '：請' + (q.type === 'select' ? '選擇' : '選擇一項') });
+      return;
+    }
+
+    if (q.type === 'text' || q.type === 'textarea') {
+      v = cleanText(v, q.max, q.type === 'textarea');
+      data[q.id] = v;
+      if (q.required && (!v || (q.letter && !/[\p{L}]/u.test(v)))) errors.push({ id: q.id, msg: '請填寫' + label });
+      return;
+    }
+
+    if (q.type === 'checkbox') {
+      var arr = [];
+      (Array.isArray(v) ? v : []).forEach(function (x) {
+        if (typeof x === 'string' && q.options.indexOf(x) >= 0 && arr.indexOf(x) < 0) arr.push(x);
+      });
+      var other = q.other ? cleanText(raw[q.id + 'Other'], 50) : '';
+      data[q.id] = arr;
+      if (q.other) data[q.id + 'Other'] = other;
+      if (q.exclusive && arr.indexOf(q.exclusive) >= 0 && (arr.length > 1 || other)) {
+        errors.push({ id: q.id, msg: label + '：「' + q.exclusive + '」不能和其他選項同時選' });
+        return;
+      }
+      if (q.required && !arr.length && !other) errors.push({ id: q.id, msg: label + '：請至少選擇一項' });
+      return;
+    }
+
+    if (q.type === 'tools') {
+      checkTools(q, v, data, errors);
+    }
+  }
+
+  function checkTools(q, list, data, errors) {
+    var out = [];
+    var seen = {};
+    var otherCount = 0;
+    list = Array.isArray(list) ? list.slice(0, TOOLS.length + MAX_OTHER_TOOLS) : [];
+
+    list.forEach(function (t, idx) {
+      if (!t || typeof t !== 'object') return;
+      var def, name, plans, key;
+      if (t.other === true) {
+        if (++otherCount > MAX_OTHER_TOOLS) return;
+        name = cleanText(t.name, 40);
+        key = 'other' + idx;
+        if (!name) { errors.push({ id: 'tools', tool: key, field: 'name', msg: '其他工具：請填寫工具名稱，或按「移除」' }); return; }
+        var k = nameKey(name);
+        if (TOOLS.some(function (d) { return nameKey(d.name) === k; })) {
+          errors.push({ id: 'tools', tool: key, field: 'name', msg: name + '：已列在上方，請直接點選上方的工具' }); return;
+        }
+        if (seen['o:' + k]) { errors.push({ id: 'tools', tool: key, field: 'name', msg: name + '：重複填寫' }); return; }
+        seen['o:' + k] = true;
+        plans = OTHER_PLANS;
+      } else {
+        def = findTool(t.id);
+        if (!def || seen[def.id]) return;
+        seen[def.id] = true;
+        name = def.name;
+        key = def.id;
+        plans = def.plans;
+      }
+
+      var item = { id: def ? def.id : 'other', name: name, other: !def, plan: '', payer: '', account: '', frequency: '' };
+      var ok = true;
+      function need(field, value, options, msg) {
+        if (typeof value === 'string' && options.indexOf(value) >= 0) { item[field] = value; return; }
+        errors.push({ id: 'tools', tool: key, field: field, msg: name + '：' + msg });
+        ok = false;
+      }
+      need('plan', t.plan, plans, '請選擇使用的方案');
+      if (isPaidPlan(item.plan)) need('payer', t.payer, PAYERS, '請選擇費用由誰支付');
+      need('account', t.account, ACCOUNTS, '請選擇登入的帳號');
+      need('frequency', t.frequency, TOOL_FREQ, '請選擇使用頻率');
+      out.push(item);
+      return ok;
+    });
+
+    data.tools = out;
+    if (q.required && !out.length && !errors.some(function (e) { return e.id === 'tools'; })) {
+      errors.push({ id: 'tools', msg: (q.short || q.label) + '：請至少選擇一項' });
+    }
+  }
+
+  return {
+    version: 2,
+    DEPARTMENTS: DEPARTMENTS,
+    TOOLS: TOOLS,
+    OTHER_PLANS: OTHER_PLANS,
+    MAX_OTHER_TOOLS: MAX_OTHER_TOOLS,
+    PAYERS: PAYERS,
+    ACCOUNTS: ACCOUNTS,
+    TOOL_FREQ: TOOL_FREQ,
+    TASKS: TASKS,
+    USING: USING,
+    SECTIONS: SECTIONS,
+    cleanText: cleanText,
+    nameKey: nameKey,
+    isPaidPlan: isPaidPlan,
+    validate: validate
+  };
+})();
+
+/* ================================================================
+ * 後端主程式（試算表寫入、統計查詢）
+ * 題目與驗證規則在上方 SurveySchema（來源：assets/schema.js）
+ * ================================================================ */
 
 var SHEET_MAIN = '填答';
-var SHEET_DETAIL = '明細';
+var SHEET_TOOLS = '工具使用明細';
 var SHEET_HISTORY = '歷史紀錄';
-var MAIN_HEADERS = ['最後更新時間', '首次填寫時間', '部門', '姓名', '需要的工具', '其他意見', '原始資料（請勿修改）'];
-var DETAIL_HEADERS = ['最後更新時間', '部門', '姓名', '工具', '是否為其他工具', '用途', '其他用途', '使用頻率', '目前使用狀況'];
-var COL_JSON = 7; // 原始資料欄位（第 7 欄）
+var MAIN_HEADERS = ['最後更新時間', '首次填寫時間', '部門', '姓名', '職務', '使用情況', '目前使用的工具', '希望公司提供', '其他意見', '原始資料（請勿修改）'];
+var TOOL_HEADERS = ['最後更新時間', '部門', '姓名', '工具', '方案', '是否付費', '費用支付', '登入帳號', '使用頻率'];
+var COL_JSON = MAIN_HEADERS.length;
 
-// 管理密碼連續錯誤幾次後暫停登入、暫停幾秒
 var MAX_LOGIN_FAILS = 8;
 var LOCKOUT_SECONDS = 900;
 
 /* ---------------- 進入點 ---------------- */
 
 function doGet() {
-  return ContentService.createTextOutput('AI 工具使用需求調查：資料接收服務運作中。');
+  return ContentService.createTextOutput('AI 工具使用現況與需求調查：資料接收服務運作中（第 ' + SurveySchema.version + ' 版）。');
 }
 
 function doPost(e) {
@@ -69,12 +339,13 @@ function doPost(e) {
 
 function handleSubmit_(raw) {
   if (!raw || typeof raw !== 'object') return { ok: false, error: '資料格式錯誤' };
+  if (raw.website) return { ok: true, updated: false, time: new Date().toISOString() }; // 防機器人欄位
+  if (raw.schemaVersion !== SurveySchema.version) {
+    return { ok: false, error: '問卷已更新，請重新整理網頁（按 F5）後再填寫' };
+  }
 
-  // 防機器人隱藏欄位：有值就假裝成功，但不寫入
-  if (raw.website) return { ok: true, updated: false, time: new Date().toISOString() };
-
-  var v = validate_(raw);
-  if (v.error) return { ok: false, error: v.error };
+  var v = SurveySchema.validate(raw);
+  if (v.errors.length) return { ok: false, error: v.errors[0].msg };
   var data = v.data;
 
   var lock = LockService.getScriptLock();
@@ -85,7 +356,6 @@ function handleSubmit_(raw) {
     var now = new Date();
     var key = personKey_(data.dept, data.name);
 
-    // 以第 7 欄原始資料（JSON）比對部門＋姓名，避免儲存格被試算表自動轉型而比對失敗
     var lastRow = main.getLastRow();
     var foundRow = -1;
     var oldRow = null;
@@ -105,14 +375,19 @@ function handleSubmit_(raw) {
 
     data.time = now.toISOString();
     data.firstTime = firstTime;
+    data.schemaVersion = SurveySchema.version;
 
-    var neededNames = data.tools.filter(function (t) { return t.need; }).map(function (t) { return t.name; });
+    var toolText = data.tools.map(function (t) { return t.name + '（' + t.plan + '）'; }).join('、');
+    var want = data.wantTools.concat(data.wantToolsOther ? [data.wantToolsOther] : []).join('、');
     var row = [
       now,
       new Date(firstTime),
       data.dept,
       sheetSafe_(data.name),
-      sheetSafe_(neededNames.join('、') || '（無）'),
+      data.role,
+      data.usage,
+      sheetSafe_(toolText || '（無）'),
+      sheetSafe_(want),
       sheetSafe_(data.comment),
       JSON.stringify(data)
     ];
@@ -125,131 +400,40 @@ function handleSubmit_(raw) {
       main.appendRow(row);
     }
 
-    rebuildDetail_(ss, main);
-    SpreadsheetApp.flush(); // 釋放鎖之前確實寫入，避免下一筆讀到舊資料
+    rebuildToolSheet_(ss, main);
+    SpreadsheetApp.flush(); // 釋放鎖之前確實寫入
     return { ok: true, updated: foundRow > 0, time: data.time };
   } finally {
     lock.releaseLock();
   }
 }
 
-function validate_(raw) {
-  var dept = cleanText_(raw.dept, 20);
-  if (DEPARTMENTS.indexOf(dept) < 0) return { error: '請選擇正確的部門' };
-
-  var name = cleanText_(raw.name, 20);
-  // 姓名至少要有一個文字（中英文字母），擋掉只有符號、單引號的輸入
-  if (!/[\p{L}]/u.test(name)) return { error: '請填寫姓名' };
-
-  var comment = cleanText_(raw.comment, 500, true);
-
-  if (!Array.isArray(raw.tools) || raw.tools.length > TOOLS.length + MAX_OTHER_TOOLS) {
-    return { error: '工具資料格式錯誤' };
-  }
-
-  var tools = [];
-  var seen = {};
-  var otherCount = 0;
-
-  for (var i = 0; i < raw.tools.length; i++) {
-    var t = raw.tools[i];
-    if (!t || typeof t !== 'object') return { error: '工具資料格式錯誤' };
-    var out;
-
-    if (t.other === true) {
-      otherCount++;
-      if (otherCount > MAX_OTHER_TOOLS) return { error: '其他工具最多 ' + MAX_OTHER_TOOLS + ' 項' };
-      var otherName = cleanText_(t.name, 40);
-      if (!otherName) return { error: '請填寫其他工具的名稱' };
-      var otherKey = toolNameKey_(otherName);
-      for (var b = 0; b < TOOLS.length; b++) {
-        if (toolNameKey_(TOOLS[b].name) === otherKey) return { error: otherName + ' 已列在上方工具中，請直接在上方選擇' };
-      }
-      if (seen['other:' + otherKey]) return { error: '其他工具「' + otherName + '」重複填寫' };
-      seen['other:' + otherKey] = true;
-      out ={ id: 'other', name: otherName, other: true, need: true };
-    } else {
-      var def = findTool_(t.id);
-      if (!def) return { error: '工具資料格式錯誤' };
-      if (seen[def.id]) return { error: '工具資料重複' };
-      seen[def.id] = true;
-      out = { id: def.id, name: def.name, other: false, need: t.need === true };
-      if (!out.need) { tools.push(out); continue; }
-    }
-
-    var detail = validateDetail_(t, out.name);
-    if (detail.error) return detail;
-    out.purposes = detail.purposes;
-    out.purposeOther = detail.purposeOther;
-    out.frequency = detail.frequency;
-    out.status = detail.status;
-    tools.push(out);
-  }
-
-  for (var k = 0; k < TOOLS.length; k++) {
-    if (!seen[TOOLS[k].id]) return { error: '請回答 ' + TOOLS[k].name + ' 是否需要' };
-  }
-
-  return { data: { dept: dept, name: name, comment: comment, tools: tools } };
-}
-
-function validateDetail_(t, label) {
-  if (!Array.isArray(t.purposes) || t.purposes.length > PURPOSES.length) return { error: label + '：用途資料錯誤' };
-  var purposes = [];
-  for (var i = 0; i < t.purposes.length; i++) {
-    var p = cleanText_(t.purposes[i], 30);
-    if (PURPOSES.indexOf(p) < 0) return { error: label + '：用途資料錯誤' };
-    if (purposes.indexOf(p) < 0) purposes.push(p);
-  }
-  var purposeOther = cleanText_(t.purposeOther, 50);
-  if (!purposes.length && !purposeOther) return { error: label + '：請至少勾選一項用途' };
-
-  var frequency = cleanText_(t.frequency, 20);
-  if (FREQUENCIES.indexOf(frequency) < 0) return { error: label + '：請選擇使用頻率' };
-
-  var status = cleanText_(t.status, 20);
-  if (STATUSES.indexOf(status) < 0) return { error: label + '：請選擇目前使用狀況' };
-
-  return { purposes: purposes, purposeOther: purposeOther, frequency: frequency, status: status };
-}
-
-// 依「填答」工作表重建「明細」工作表（一人一工具一列，方便樞紐分析）
-function rebuildDetail_(ss, main) {
-  var detail = ensureSheet_(ss, SHEET_DETAIL, DETAIL_HEADERS);
+// 依「填答」重建「工具使用明細」（一人一工具一列，方便樞紐分析）
+function rebuildToolSheet_(ss, main) {
+  var sh = ensureSheet_(ss, SHEET_TOOLS, TOOL_HEADERS);
   var rows = [];
   readResponses_(main).forEach(function (r) {
-    r.tools.forEach(function (t) {
-      if (!t.need) return;
+    (r.tools || []).forEach(function (t) {
       rows.push([
-        new Date(r.time),
-        r.dept,
-        sheetSafe_(r.name),
-        sheetSafe_(t.name),
-        t.other ? '是' : '否',
-        (t.purposes || []).join('、'),
-        sheetSafe_(t.purposeOther || ''),
-        t.frequency,
-        t.status
+        new Date(r.time), r.dept, sheetSafe_(r.name), sheetSafe_(t.name), t.plan,
+        SurveySchema.isPaidPlan(t.plan) ? '付費' : '免費或不清楚', t.payer, t.account, t.frequency
       ]);
     });
   });
-
-  var last = detail.getLastRow();
-  if (last > 1) detail.getRange(2, 1, last - 1, DETAIL_HEADERS.length).clearContent();
-  if (rows.length) detail.getRange(2, 1, rows.length, DETAIL_HEADERS.length).setValues(rows);
+  var last = sh.getLastRow();
+  if (last > 1) sh.getRange(2, 1, last - 1, TOOL_HEADERS.length).clearContent();
+  if (rows.length) sh.getRange(2, 1, rows.length, TOOL_HEADERS.length).setValues(rows);
 }
 
 /* ---------------- 統計（需管理密碼） ---------------- */
 
 function handleStats_(password) {
-  var props = PropertiesService.getScriptProperties();
-  var adminPw = props.getProperty('ADMIN_PASSWORD');
+  var adminPw = PropertiesService.getScriptProperties().getProperty('ADMIN_PASSWORD');
   if (!adminPw || adminPw.length < 8) {
     return { ok: false, error: '尚未設定管理密碼（指令碼屬性 ADMIN_PASSWORD，至少 8 碼）' };
   }
 
-  // 用文件鎖（與填答用的指令碼鎖分開）讓「讀取錯誤次數 → 比對 → 累加」不被並發請求繞過，
-  // 有人猜密碼時也不會卡住同仁送出問卷
+  // 文件鎖與填答用的指令碼鎖分開：猜密碼不會卡住同仁送出問卷，也不能用並發請求繞過次數限制
   var lock = LockService.getDocumentLock();
   if (!lock.tryLock(10000)) return { ok: false, error: '系統忙碌，請稍後再試' };
   var passed = false;
@@ -274,12 +458,11 @@ function handleStats_(password) {
     return { ok: false, error: '密碼錯誤' };
   }
 
-  var ss = SpreadsheetApp.getActiveSpreadsheet();
-  var main = ensureSheet_(ss, SHEET_MAIN, MAIN_HEADERS);
-  return { ok: true, time: new Date().toISOString(), responses: readResponses_(main) };
+  var main = ensureSheet_(SpreadsheetApp.getActiveSpreadsheet(), SHEET_MAIN, MAIN_HEADERS);
+  return { ok: true, time: new Date().toISOString(), schemaVersion: SurveySchema.version, responses: readResponses_(main) };
 }
 
-// 讀出所有有效填答；萬一同一人有多列（例如手動貼上），只取最後更新的一筆
+// 讀出所有有效填答；同一人有多列時只取最後更新的一筆
 function readResponses_(main) {
   var last = main.getLastRow();
   if (last < 2) return [];
@@ -288,7 +471,7 @@ function readResponses_(main) {
   var order = [];
   vals.forEach(function (row) {
     var d = parseJson_(row[COL_JSON - 1]);
-    if (!d || !d.dept || !d.name || !Array.isArray(d.tools)) return; // 被手動改壞的列直接略過
+    if (!d || d.schemaVersion !== SurveySchema.version || !d.dept || !d.name) return;
     var k = personKey_(d.dept, d.name);
     if (!byKey[k]) order.push(k);
     if (!byKey[k] || String(d.time) > String(byKey[k].time)) byKey[k] = d;
@@ -298,15 +481,18 @@ function readResponses_(main) {
 
 /* ---------------- 工具函式 ---------------- */
 
+// 取得工作表；若表頭和目前版本不同（例如第一版問卷留下的），把舊表改名保留，再建新表
 function ensureSheet_(ss, name, headers) {
   var sh = ss.getSheetByName(name);
-  if (!sh) {
-    sh = ss.insertSheet(name);
-    // 文字欄位設為純文字，避免姓名被自動轉成數字或日期（第 1、2 欄為時間）
-    sh.getRange(1, 3, sh.getMaxRows(), headers.length - 2).setNumberFormat('@');
-    sh.getRange(1, 1, 1, headers.length).setValues([headers]).setFontWeight('bold');
-    sh.setFrozenRows(1);
+  if (sh) {
+    var cur = sh.getRange(1, 1, 1, headers.length).getValues()[0];
+    if (cur.join('|') === headers.join('|')) return sh;
+    sh.setName(name + '（舊版 ' + Utilities.formatDate(new Date(), 'Asia/Taipei', 'yyyyMMdd-HHmm') + '）');
   }
+  sh = ss.insertSheet(name);
+  sh.getRange(1, 3, sh.getMaxRows(), headers.length - 2).setNumberFormat('@'); // 文字欄設純文字，避免被轉成數字或日期
+  sh.getRange(1, 1, 1, headers.length).setValues([headers]).setFontWeight('bold');
+  sh.setFrozenRows(1);
   return sh;
 }
 
@@ -315,39 +501,17 @@ function parseJson_(s) {
   try { return JSON.parse(s); } catch (err) { return null; }
 }
 
-// 其他工具名稱比對用：去除空白、轉小寫
-function toolNameKey_(s) {
-  return String(s).replace(/\s+/g, '').toLowerCase();
-}
-
-function findTool_(id) {
-  for (var i = 0; i < TOOLS.length; i++) if (TOOLS[i].id === id) return TOOLS[i];
-  return null;
-}
-
-// 去除控制字元、合併空白、限制長度
-function cleanText_(s, max, multiline) {
-  if (typeof s !== 'string') return '';
-  if (multiline) {
-    s = s.replace(/\r\n?/g, '\n').replace(/[\u0000-\u0009\u000B-\u001F\u007F]/g, '').replace(/[ \t]+/g, ' ').replace(/\n{3,}/g, '\n\n');
-  } else {
-    s = s.replace(/[\u0000-\u001F\u007F]/g, ' ').replace(/\s+/g, ' ');
-  }
-  return s.trim().slice(0, max);
-}
-
-// 姓名比對用：去除所有空白、英文轉小寫
 function personKey_(dept, name) {
-  return String(dept).trim() + '|' + String(name).replace(/^'/, '').replace(/\s+/g, '').toLowerCase();
+  return String(dept).trim() + '|' + SurveySchema.nameKey(name);
 }
 
-// 防止試算表公式注入：開頭是 = + - @（含全形）或單引號的文字前面加上單引號
+// 防止試算表公式注入
 function sheetSafe_(s) {
   s = String(s || '');
   return /^[=+\-@＝＋－＠']/.test(s) ? "'" + s : s;
 }
 
-// 先轉成固定長度的 SHA-256 再比對，不因長度不同而提早結束
+// 先轉成固定長度的 SHA-256 再比對
 function safeEqual_(a, b) {
   var ha = Utilities.computeDigest(Utilities.DigestAlgorithm.SHA_256, a, Utilities.Charset.UTF_8);
   var hb = Utilities.computeDigest(Utilities.DigestAlgorithm.SHA_256, b, Utilities.Charset.UTF_8);
@@ -360,12 +524,12 @@ function json_(obj) {
   return ContentService.createTextOutput(JSON.stringify(obj)).setMimeType(ContentService.MimeType.JSON);
 }
 
-/* 部署前可在編輯器中手動執行一次，建立工作表並授權 */
+/* 部署或更新後在編輯器中手動執行一次：建立工作表、確認密碼 */
 function setup() {
   var ss = SpreadsheetApp.getActiveSpreadsheet();
   ensureSheet_(ss, SHEET_MAIN, MAIN_HEADERS);
-  ensureSheet_(ss, SHEET_DETAIL, DETAIL_HEADERS);
+  ensureSheet_(ss, SHEET_TOOLS, TOOL_HEADERS);
   ensureSheet_(ss, SHEET_HISTORY, MAIN_HEADERS);
   var pw = PropertiesService.getScriptProperties().getProperty('ADMIN_PASSWORD');
-  console.log(pw && pw.length >= 8 ? '工作表已建立，管理密碼已設定。' : '工作表已建立。請到「專案設定 → 指令碼屬性」新增 ADMIN_PASSWORD（至少 8 碼）。');
+  console.log(pw && pw.length >= 8 ? '工作表已就緒，管理密碼已設定。' : '工作表已就緒。請到「專案設定 → 指令碼屬性」新增 ADMIN_PASSWORD（至少 8 碼）。');
 }

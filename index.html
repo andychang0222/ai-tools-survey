@@ -6,141 +6,92 @@
   <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src https://script.google.com https://script.googleusercontent.com; form-action 'none'; base-uri 'none'; object-src 'none'">
   <meta name="referrer" content="no-referrer">
   <meta name="robots" content="noindex, nofollow">
-  <title>AI 工具使用需求調查｜八貫企業股份有限公司 資訊單位</title>
-  <link rel="stylesheet" href="assets/style.css?v=3">
+  <meta name="theme-color" content="#1d1f4a">
+  <title>AI 工具使用現況與需求調查｜八貫企業股份有限公司</title>
+  <link rel="icon" href="assets/img/favicon.png">
+  <link rel="stylesheet" href="assets/style.css?v=4">
 </head>
 <body>
-  <div class="topbar"></div>
-  <header class="site-header">
+  <header class="topbar">
     <div class="inner">
-      <div class="brand-mark" aria-hidden="true">八貫</div>
-      <div class="brand-text">
-        <div class="brand-zh" data-cfg="companyZh">八貫企業股份有限公司</div>
-        <div class="brand-en" data-cfg="companyEn">Cathay Consolidated, Inc</div>
-      </div>
-      <div class="header-unit"><span data-cfg="issuer">資訊單位</span>・內部調查</div>
+      <img class="topbar-logo" src="assets/img/logo-dark.png" width="362" height="102" alt="Cathay Consolidated, Inc. 八貫企業">
+      <span class="topbar-unit"><span data-cfg="issuer">資訊單位</span>　內部問卷</span>
     </div>
   </header>
 
-  <main>
-    <section class="doc-head">
-      <p class="doc-kicker">內部問卷調查</p>
-      <h1>AI 工具使用需求調查</h1>
-      <dl class="doc-meta">
-        <div><dt>發起單位</dt><dd data-cfg="issuer">資訊單位</dd></div>
-        <div><dt>填寫對象</dt><dd>全體同仁</dd></div>
-        <div><dt>填寫時間</dt><dd>約 3 分鐘</dd></div>
-        <div id="deadlineRow" hidden><dt>截止日期</dt><dd id="deadlineText"></dd></div>
-      </dl>
-      <p class="intro">
-        為規劃公司 AI 工具的導入與授權採購，資訊單位想了解各部門同仁對 AI 工具的實際需求。
-        請依您的工作情況，勾選需要的工具、主要用途、預計使用頻率，以及目前是否已在使用。
-      </p>
-      <div class="notice">
-        <strong>填寫須知</strong>
-        <ul>
-          <li>本調查<strong>只收集部門與姓名</strong>，不會要求您輸入任何帳號、密碼、員工編號或其他個人資料。</li>
-          <li>若有人以本調查名義要求您提供帳號或密碼，請勿理會，並通報資訊單位。</li>
-          <li>填答結果僅供公司內部規劃 AI 工具使用，不作其他用途。</li>
-          <li>送出後如需修改，重新填寫並送出即可，系統以<strong>同部門、同姓名的最後一次填寫</strong>為準。</li>
-        </ul>
+  <section class="hero">
+    <div class="hero-media" role="img" aria-label="八貫企業廠房外觀"></div>
+    <div class="hero-inner">
+      <div class="hero-text">
+        <p class="hero-org"><span data-cfg="companyZh">八貫企業股份有限公司</span>　<span data-cfg="issuer">資訊單位</span></p>
+        <h1>AI 工具使用現況<br>與需求調查</h1>
+        <p class="hero-lead">公司正在規劃 AI 工具的導入與使用規範。想先了解大家現在怎麼用 AI、用在哪些工作，以及需要公司提供哪些工具與支援。</p>
+        <dl class="hero-facts">
+          <div><dt>填寫對象</dt><dd>全體同仁</dd></div>
+          <div><dt>所需時間</dt><dd>約 5 分鐘</dd></div>
+          <div id="deadlineRow" hidden><dt>截止日期</dt><dd id="deadlineText"></dd></div>
+        </dl>
+        <p class="hero-trust">
+          <svg width="16" height="18" viewBox="0 0 16 18" aria-hidden="true"><path d="M8 1l6 2.5v5c0 4-2.7 7-6 8.5C4.7 15.5 2 12.5 2 8.5v-5L8 1z" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M5.2 8.8l2 2 3.6-3.8" fill="none" stroke="currentColor" stroke-width="1.6"/></svg>
+          <span>本問卷只詢問部門與姓名，不會要求帳號、密碼或員工編號。若有人以本問卷名義向你索取帳號密碼，請勿提供，並通知資訊單位。</span>
+        </p>
       </div>
-    </section>
-
-    <div id="configAlert" class="alert alert-warn" hidden>
-      本調查尚未開放填寫（資料接收網址未設定）。如有疑問請洽資訊單位。
     </div>
+  </section>
 
-    <form id="surveyForm" novalidate>
-      <section class="section">
-        <div class="section-head">
-          <span class="section-no">一、</span>
-          <h2>基本資料</h2>
-        </div>
-        <div class="section-body">
-          <div class="field-row">
-            <div class="field">
-              <label class="label" for="dept">部門<span class="req">*</span></label>
-              <select id="dept" name="dept" required>
-                <option value="">請選擇部門</option>
-              </select>
-            </div>
-            <div class="field">
-              <label class="label" for="name">姓名<span class="req">*</span></label>
-              <input type="text" id="name" name="name" maxlength="20" autocomplete="name" required placeholder="請填寫中文全名">
-            </div>
-          </div>
-          <div class="hp" aria-hidden="true">
-            <label for="website">請勿填寫此欄</label>
-            <input type="text" id="website" name="website" tabindex="-1" autocomplete="off">
-          </div>
-        </div>
-      </section>
+  <div class="mobile-progress" id="mobileProgress" aria-hidden="true">
+    <span id="mpText">已完成 0 題</span>
+    <div class="mp-track"><div class="mp-fill" id="mpFill"></div></div>
+  </div>
 
-      <section class="section">
-        <div class="section-head">
-          <span class="section-no">二、</span>
-          <h2>AI 工具需求</h2>
-          <p>每項工具請選擇「需要」或「不需要」</p>
-        </div>
-        <div class="section-body" id="toolList"></div>
-      </section>
+  <div class="layout">
+    <nav class="rail" aria-label="問卷進度">
+      <ol class="steps" id="steps"></ol>
+      <p class="rail-note">送出後如需修改，重新填寫送出即可，系統以同部門、同姓名的最後一次為準。</p>
+    </nav>
 
-      <section class="section">
-        <div class="section-head">
-          <span class="section-no">三、</span>
-          <h2>其他 AI 工具</h2>
-          <p>選填：上面沒有列出、但您需要的工具</p>
-        </div>
-        <div class="section-body">
-          <div id="otherList"></div>
-          <div class="other-tools-actions">
-            <button type="button" class="btn btn-ghost btn-sm" id="addOther">＋ 新增其他工具</button>
-          </div>
-        </div>
-      </section>
+    <main class="sheet">
+      <div class="notice-box" id="configAlert" hidden>本問卷目前尚未開放填寫。如有疑問請洽資訊單位。</div>
 
-      <section class="section">
-        <div class="section-head">
-          <span class="section-no">四、</span>
-          <h2>其他意見</h2>
-          <p>選填</p>
+      <form id="surveyForm" novalidate>
+        <div id="sections"></div>
+        <div class="hp" aria-hidden="true">
+          <label for="website">請勿填寫此欄</label>
+          <input type="text" id="website" name="website" tabindex="-1" autocomplete="off">
         </div>
-        <div class="section-body">
-          <div class="field">
-            <label class="label" for="comment">對公司導入 AI 工具的建議或想法</label>
-            <textarea id="comment" name="comment" maxlength="500" placeholder="例如：希望提供教育訓練、需要哪些功能等"></textarea>
-          </div>
+        <div class="submit-area">
+          <button type="submit" class="btn" id="submitBtn">送出問卷</button>
+          <span class="submit-status" id="submitStatus" aria-live="polite"></span>
         </div>
-      </section>
+        <div class="error-box" id="errorBox" role="alert" hidden></div>
+      </form>
 
-      <div id="formError" class="alert alert-err" hidden></div>
-
-      <div class="submit-bar">
-        <button type="submit" class="btn" id="submitBtn">送出問卷</button>
-        <span class="note">送出後如需修改，重新填寫即可。</span>
-      </div>
-    </form>
-
-    <section class="section" id="doneView" hidden>
-      <div class="section-body done">
-        <h2>已收到您的填答，謝謝！</h2>
+      <section class="done" id="doneView" hidden tabindex="-1">
+        <div class="done-check" aria-hidden="true">
+          <svg width="24" height="18" viewBox="0 0 24 18"><path d="M2 9l7 7L22 2" fill="none" stroke="#fff" stroke-width="3"/></svg>
+        </div>
+        <h2>已收到你的填答，謝謝！</h2>
         <p id="doneText"></p>
-        <ul class="summary-list" id="doneSummary"></ul>
-        <p><button type="button" class="btn btn-ghost btn-sm" id="againBtn">修改填答</button></p>
-      </div>
-    </section>
-  </main>
+        <dl class="summary" id="doneSummary"></dl>
+        <button type="button" class="btn btn-ghost btn-sm" id="againBtn">修改填答</button>
+      </section>
+    </main>
+  </div>
 
   <footer class="site-footer">
     <div class="inner">
-      <span><span data-cfg="companyZh">八貫企業股份有限公司</span>　<span data-cfg="issuer">資訊單位</span></span>
-      <span data-cfg="contact">如對本調查有任何疑問，請洽資訊單位。</span>
+      <img class="footer-logo" src="assets/img/logo-white.png" width="550" height="194" alt="Cathay Consolidated, Inc.">
+      <div class="footer-text">
+        <span><span data-cfg="companyZh">八貫企業股份有限公司</span>　<span data-cfg="issuer">資訊單位</span></span>
+        <span data-cfg="companyEn">Cathay Consolidated, Inc</span>
+      </div>
+      <span class="footer-contact" data-cfg="contact">對問卷有疑問，請洽資訊單位。</span>
     </div>
   </footer>
 
-  <script src="assets/config.js?v=3"></script>
-  <script src="assets/common.js?v=3"></script>
-  <script src="assets/survey.js?v=3"></script>
+  <script src="assets/config.js?v=4"></script>
+  <script src="assets/schema.js?v=4"></script>
+  <script src="assets/common.js?v=4"></script>
+  <script src="assets/survey.js?v=4"></script>
 </body>
 </html>

@@ -6,108 +6,128 @@
   <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data: blob:; connect-src https://script.google.com https://script.googleusercontent.com; form-action 'none'; base-uri 'none'; object-src 'none'">
   <meta name="referrer" content="no-referrer">
   <meta name="robots" content="noindex, nofollow">
-  <title>調查統計｜AI 工具使用需求調查</title>
-  <link rel="stylesheet" href="assets/style.css?v=3">
+  <title>調查統計｜AI 工具使用現況與需求調查</title>
+  <link rel="icon" href="assets/img/favicon.png">
+  <link rel="stylesheet" href="assets/style.css?v=4">
 </head>
-<body class="wide">
-  <div class="topbar"></div>
-  <header class="site-header">
+<body>
+  <header class="topbar">
     <div class="inner">
-      <div class="brand-mark" aria-hidden="true">八貫</div>
-      <div class="brand-text">
-        <div class="brand-zh" data-cfg="companyZh">八貫企業股份有限公司</div>
-        <div class="brand-en" data-cfg="companyEn">Cathay Consolidated, Inc</div>
-      </div>
-      <div class="header-unit"><span data-cfg="issuer">資訊單位</span>・統計管理</div>
+      <img class="topbar-logo" src="assets/img/logo-dark.png" width="362" height="102" alt="Cathay Consolidated, Inc. 八貫企業">
+      <span class="topbar-unit"><span data-cfg="issuer">資訊單位</span>　統計管理</span>
     </div>
   </header>
 
-  <main>
-    <section class="doc-head">
-      <p class="doc-kicker">管理人員專用</p>
-      <h1>AI 工具使用需求調查・統計</h1>
-      <p class="intro" id="introText">請輸入管理密碼查看統計結果。資料來源為 Google 試算表，同部門同姓名以最後一次填寫為準。</p>
-    </section>
+  <section class="admin-band">
+    <div class="inner">
+      <h1>AI 工具使用現況與需求調查・統計</h1>
+      <p id="introText">管理人員專用。請輸入管理密碼查看統計結果。</p>
+    </div>
+  </section>
 
-    <div id="configAlert" class="alert alert-warn" hidden>尚未設定資料接收網址（assets/config.js 的 apiUrl）。</div>
+  <main class="admin-main">
+    <div class="notice-box" id="configAlert" hidden>尚未設定資料接收網址（assets/config.js 的 apiUrl）。</div>
 
-    <section class="section login-box" id="loginView">
-      <div class="section-body">
-        <form id="loginForm" novalidate>
-          <div class="field">
-            <label class="label" for="pw">管理密碼</label>
-            <input type="password" id="pw" autocomplete="current-password" required>
-          </div>
-          <div id="loginError" class="alert alert-err" hidden></div>
-          <button type="submit" class="btn" id="loginBtn">查看統計</button>
-        </form>
-      </div>
+    <section class="panel login-panel" id="loginView">
+      <form id="loginForm" novalidate>
+        <label for="pw">管理密碼</label>
+        <input type="password" id="pw" autocomplete="current-password">
+        <p class="login-error" id="loginError" role="alert" hidden></p>
+        <button type="submit" class="btn" id="loginBtn">查看統計</button>
+      </form>
     </section>
 
     <div id="statsView" hidden>
-      <div class="section">
-        <div class="section-body toolbar">
-          <label class="label" for="deptFilter">部門篩選</label>
+      <section class="panel">
+        <div class="toolbar">
+          <label for="deptFilter">部門</label>
           <select id="deptFilter"></select>
           <span class="spacer"></span>
           <span class="updated" id="updatedAt"></span>
           <button type="button" class="btn btn-ghost btn-sm" id="reloadBtn">重新整理</button>
-          <button type="button" class="btn btn-ghost btn-sm" id="csvBtn">匯出明細 CSV</button>
+          <button type="button" class="btn btn-ghost btn-sm" id="csvBtn">匯出 CSV</button>
           <button type="button" class="btn btn-ghost btn-sm" id="logoutBtn">登出</button>
         </div>
+      </section>
+
+      <section class="panel"><div class="kpis" id="kpis"></div></section>
+
+      <div class="grid-2 stack">
+        <section class="panel"><h2>工作上使用 AI 的情況</h2><p class="panel-sub" id="sub-usage"></p><div id="c-usage"></div></section>
+        <section class="panel"><h2>AI 熟悉程度</h2><p class="panel-sub" id="sub-familiarity"></p><div id="c-familiarity"></div></section>
       </div>
 
-      <div class="kpis" id="kpis"></div>
-
-      <section class="section">
-        <div class="section-head"><span class="section-no">一、</span><h2>各工具需求與使用狀況</h2><p>人數</p></div>
-        <div class="section-body">
-          <div class="legend" id="statusLegend"></div>
-          <div class="table-wrap" id="toolTable"></div>
-        </div>
+      <section class="panel">
+        <h2>各工具使用情形</h2>
+        <p class="panel-sub">目前使用者自填。「個人帳號」包含個人 Email 與未登入，代表公司資料可能存在個人帳號中。</p>
+        <div class="table-wrap" id="c-tools"></div>
       </section>
 
-      <section class="section">
-        <div class="section-head"><span class="section-no">二、</span><h2>各部門需求人數</h2><p>部門 × 工具，顏色越深人數越多</p></div>
-        <div class="section-body"><div class="table-wrap" id="deptTable"></div></div>
+      <div class="grid-2 stack">
+        <section class="panel"><h2>目前用 AI 做的工作</h2><p class="panel-sub" id="sub-tasks"></p><div id="c-tasks"></div></section>
+        <section class="panel"><h2>希望 AI 協助的工作</h2><p class="panel-sub" id="sub-futureTasks"></p><div id="c-futureTasks"></div></section>
+      </div>
+
+      <section class="panel">
+        <h2>資料安全</h2>
+        <p class="panel-sub" id="sub-dataTypes"></p>
+        <div id="c-dataTypes"></div>
       </section>
 
-      <section class="section">
-        <div class="section-head"><span class="section-no">三、</span><h2>使用頻率分布</h2><p>需要該工具的人數</p></div>
-        <div class="section-body"><div class="table-wrap" id="freqTable"></div></div>
+      <div class="grid-2 stack">
+        <section class="panel"><h2>知道 AI 可能保存或訓練對話嗎</h2><p class="panel-sub" id="sub-trainingAware"></p><div id="c-trainingAware"></div></section>
+        <section class="panel"><h2>使用 AI 產出前是否查核</h2><p class="panel-sub" id="sub-verify"></p><div id="c-verify"></div></section>
+        <section class="panel"><h2>使用裝置</h2><p class="panel-sub" id="sub-devices"></p><div id="c-devices"></div></section>
+        <section class="panel"><h2>每週節省時間</h2><p class="panel-sub" id="sub-timeSaved"></p><div id="c-timeSaved"></div></section>
+      </div>
+
+      <div class="grid-2 stack">
+        <section class="panel"><h2>希望公司提供的工具</h2><p class="panel-sub" id="sub-wantTools"></p><div id="c-wantTools"></div></section>
+        <section class="panel"><h2>預計使用頻率</h2><p class="panel-sub" id="sub-wantFrequency"></p><div id="c-wantFrequency"></div></section>
+        <section class="panel"><h2>希望公司提供的支援</h2><p class="panel-sub" id="sub-support"></p><div id="c-support"></div></section>
+        <section class="panel"><h2>對 AI 管理方式的看法</h2><p class="panel-sub" id="sub-policy"></p><div id="c-policy"></div></section>
+      </div>
+
+      <section class="panel">
+        <h2>沒有使用 AI 的原因</h2>
+        <p class="panel-sub" id="sub-notUsingReasons"></p>
+        <div id="c-notUsingReasons"></div>
       </section>
 
-      <section class="section">
-        <div class="section-head"><span class="section-no">四、</span><h2>用途分布</h2><p>可複選，人數（「其他工具」一人填多項只算一次）</p></div>
-        <div class="section-body"><div class="table-wrap" id="purposeTable"></div></div>
+      <section class="panel">
+        <h2>各部門概況</h2>
+        <p class="panel-sub">人數。顏色越深代表該部門比例越高。</p>
+        <div class="table-wrap" id="c-dept"></div>
       </section>
 
-      <section class="section">
-        <div class="section-head"><span class="section-no">五、</span><h2>其他工具與其他用途</h2><p>填答人自行輸入</p></div>
-        <div class="section-body"><div class="table-wrap" id="otherTable"></div></div>
+      <section class="panel">
+        <h2>同仁的文字回饋</h2>
+        <p class="panel-sub">實際例子、其他意見與自行輸入的選項。</p>
+        <div id="c-texts"></div>
       </section>
 
-      <section class="section">
-        <div class="section-head"><span class="section-no">六、</span><h2>填答名單</h2><p id="listCount"></p></div>
-        <div class="section-body">
-          <div class="field">
-            <input type="text" id="search" placeholder="搜尋姓名或工具" aria-label="搜尋姓名或工具">
-          </div>
-          <div class="table-wrap" id="listTable"></div>
-        </div>
+      <section class="panel">
+        <h2>填答名單</h2>
+        <p class="panel-sub" id="listCount"></p>
+        <input type="text" class="search" id="search" placeholder="搜尋姓名、部門或工具" aria-label="搜尋姓名、部門或工具">
+        <div class="table-wrap" id="c-list"></div>
       </section>
     </div>
   </main>
 
   <footer class="site-footer">
     <div class="inner">
-      <span><span data-cfg="companyZh">八貫企業股份有限公司</span>　<span data-cfg="issuer">資訊單位</span></span>
-      <span>本頁資料含同仁姓名，請勿外流。</span>
+      <img class="footer-logo" src="assets/img/logo-white.png" width="550" height="194" alt="Cathay Consolidated, Inc.">
+      <div class="footer-text">
+        <span><span data-cfg="companyZh">八貫企業股份有限公司</span>　<span data-cfg="issuer">資訊單位</span></span>
+        <span>本頁含同仁姓名與填答內容，請勿外流。</span>
+      </div>
     </div>
   </footer>
 
-  <script src="assets/config.js?v=3"></script>
-  <script src="assets/common.js?v=3"></script>
-  <script src="assets/admin.js?v=3"></script>
+  <script src="assets/config.js?v=4"></script>
+  <script src="assets/schema.js?v=4"></script>
+  <script src="assets/common.js?v=4"></script>
+  <script src="assets/admin.js?v=4"></script>
 </body>
 </html>

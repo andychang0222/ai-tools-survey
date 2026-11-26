@@ -13,13 +13,21 @@
 ---
 
 ## 進行中
-_目前無進行中任務。_
+### 第 2 版：問卷內容重新設計＋視覺改版（Claude Code，2026-11-26）
+使用者回饋：第一版只問「需不需要」，缺少現況、方案、付費、資料安全等導入與管制面向；外觀像釣魚網站。
+- 受影響檔案：`assets/schema.js`（新）、`apps-script/server.gs`（新）、`apps-script/build.js`（新）、`apps-script/Code.gs`（改為自動產生）、`index.html`、`admin.html`、`assets/survey.js`、`assets/admin.js`、`assets/style.css`、`assets/config.js`、`assets/img/*`（新）、`README.md`
+- ✅ 題目重新設計：4 區段、條件題（使用者／未使用者）、各工具方案／付費者／帳號／頻率、資料安全、需求與管理看法
+- ✅ 題目與驗證規則集中在 `schema.js`，前後端共用；`build.js` 合併產生 `Code.gs`
+- ✅ 視覺改版（frontend-design skill）：沿用官網品牌色與正式 Logo、官網已公開的大樓照片當主視覺、左側進度欄、手機版進度列
+- ✅ 統計頁改版（dataviz skill）：單色橫條、敏感資料以警示色＋文字標籤、各工具方案表、部門概況、文字回饋
+- ✅ Node 測試（驗證規則＋模擬試算表後端）與瀏覽器測試（桌機、390px 手機寬度）通過
+- ⏭️ Gemini 審查：使用者表示簡單網頁不需送審，略過
+- ✅ 推上 GitHub
+- ⬜ 使用者更新 Apps Script 為新版 `Code.gs` 並部署新版本
 
 ## 待使用者完成
-- ✅ 建立 Google 試算表、貼上 `Code.gs`、設定 `ADMIN_PASSWORD`、部署網頁應用程式（2026-11-26，GET／POST 連線測試正常）
-- ✅ 部署網址已填入 `assets/config.js` 的 `apiUrl` 並推送
-- ✅ GitHub Pages 已開啟（2026-11-26）：https://andychang0222.github.io/ai-tools-survey/ ；線上確認填答頁、統計頁載入無錯誤，從 github.io 連到 Apps Script 正常
-- ⬜ 使用者自行送一筆測試填答並以管理密碼登入統計頁確認
+- ✅ 建立 Google 試算表、設定 `ADMIN_PASSWORD`、部署網頁應用程式、開啟 GitHub Pages（第 1 版）
+- ⬜ 第 2 版：更新 Apps Script（步驟見 README「更新後端」）
 
 ---
 

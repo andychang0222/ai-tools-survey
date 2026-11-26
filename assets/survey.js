@@ -1,332 +1,416 @@
-/* 填答頁邏輯 */
+/* 填答頁：依 SurveySchema 產生問卷、即時顯示條件題、計算進度、送出 */
 (function () {
   'use strict';
   var C = window.SurveyCommon;
+  var S = window.SurveySchema;
   var CFG = C.CFG;
   var el = C.el;
+  var $ = function (id) { return document.getElementById(id); };
 
-  var form = document.getElementById('surveyForm');
-  var toolList = document.getElementById('toolList');
-  var otherList = document.getElementById('otherList');
-  var addOtherBtn = document.getElementById('addOther');
-  var submitBtn = document.getElementById('submitBtn');
-  var formError = document.getElementById('formError');
-  var otherSeq = 0;
+  var form = $('surveyForm');
+  var sectionsEl = $('sections');
+  var submitBtn = $('submitBtn');
+  var attempted = false;   // 按過送出後才即時顯示錯誤
   var submitting = false;
+  var otherSeq = 0;
+  var lastVisible = {};    // 題目上一次是否可見（用來做出現動畫）
 
   C.applyConfig();
+  if (CFG.deadline) { $('deadlineText').textContent = CFG.deadline; $('deadlineRow').hidden = false; }
+  if (!C.apiReady()) { $('configAlert').hidden = false; submitBtn.disabled = true; }
 
-  if (CFG.deadline) {
-    document.getElementById('deadlineText').textContent = CFG.deadline;
-    document.getElementById('deadlineRow').hidden = false;
+  /* ================= 產生問卷 ================= */
+
+  function choice(type, name, value, text) {
+    var input = el('input', { type: type, name: name, value: value });
+    return el('label', { className: 'choice' + (type === 'radio' ? ' is-radio' : '') }, [
+      input, el('span', { className: 'mark', 'aria-hidden': 'true' }), el('span', { text: text })
+    ]);
   }
 
-  if (!C.apiReady()) {
-    document.getElementById('configAlert').hidden = false;
-    submitBtn.disabled = true;
+  function isCompact(options) {
+    return options.every(function (o) { return o.length <= 9; }) && options.length <= 6;
   }
 
-  // 部門選單
-  var deptSel = document.getElementById('dept');
-  CFG.departments.forEach(function (d) {
-    deptSel.appendChild(el('option', { value: d, text: d }));
-  });
+  function buildQuestion(q) {
+    var labelId = 'lbl-' + q.id;
+    var head = el('div', { className: 'q-head' }, [
+      el('span', { className: 'q-no', 'aria-hidden': 'true' }),
+      el(q.type === 'select' || q.type === 'text' || q.type === 'textarea' ? 'label' : 'span',
+        { className: 'q-label', id: labelId, 'for': (q.type === 'select' || q.type === 'text' || q.type === 'textarea') ? 'f-' + q.id : null },
+        [q.label, q.required ? el('span', { className: 'q-req', 'aria-hidden': 'true', text: '*' }) : null]),
+      q.hint ? el('span', { className: 'q-hint', text: q.hint }) : null
+    ]);
 
-  // ---------- 建立工具卡片 ----------
-  function radioGroup(name, values, className) {
-    return el('div', { className: 'options ' + (className || ''), role: 'radiogroup' }, values.map(function (v) {
-      return el('label', { className: 'opt' }, [el('input', { type: 'radio', name: name, value: v }), v]);
+    var body;
+    if (q.type === 'select') {
+      var sel = el('select', { id: 'f-' + q.id, name: q.id, required: q.required }, [el('option', { value: '', text: '請選擇' })]);
+      q.options.forEach(function (o) { sel.appendChild(el('option', { value: o, text: o })); });
+      body = sel;
+    } else if (q.type === 'text') {
+      body = el('input', { type: 'text', id: 'f-' + q.id, name: q.id, maxlength: q.max, placeholder: q.placeholder, autocomplete: q.id === 'name' ? 'name' : 'off' });
+    } else if (q.type === 'textarea') {
+      body = el('textarea', { id: 'f-' + q.id, name: q.id, maxlength: q.max, placeholder: q.placeholder });
+    } else if (q.type === 'radio' || q.type === 'checkbox') {
+      var type = q.type;
+      var box = el('div', { className: 'choices' + (isCompact(q.options) ? ' compact' : ''), role: type === 'radio' ? 'radiogroup' : 'group', 'aria-labelledby': labelId },
+        q.options.map(function (o) { return choice(type, q.id, o, o); }));
+      var parts = [box];
+      if (q.other) {
+        box.appendChild(choice('checkbox', q.id, '__other__', '其他'));
+        var otherInput = el('input', { type: 'text', className: 'other-input', maxlength: '50', placeholder: '請說明', 'aria-label': q.short + '：其他（請說明）', dataset: { otherFor: q.id } });
+        otherInput.hidden = true;
+        parts.push(otherInput);
+      }
+      body = el('div', null, parts);
+    } else if (q.type === 'tools') {
+      body = buildTools(labelId);
+    }
+
+    var wrap = el('div', { className: 'q', id: 'q-' + q.id, dataset: { q: q.id } }, [
+      head,
+      el('div', { className: 'q-body' }, [body]),
+      el('p', { className: 'q-error', id: 'err-' + q.id, hidden: true })
+    ]);
+    return wrap;
+  }
+
+  /* ---------- 工具選擇與明細 ---------- */
+  var toolPanels;
+
+  function buildTools(labelId) {
+    var grid = el('div', { className: 'tool-grid', role: 'group', 'aria-labelledby': labelId }, S.TOOLS.map(function (t) {
+      var input = el('input', { type: 'checkbox', value: t.id, dataset: { tool: t.id } });
+      input.addEventListener('change', function () {
+        if (input.checked) addPanel(t, false); else removePanel(t.id);
+      });
+      return el('label', { className: 'tool-tile' }, [input,
+        el('span', { className: 'tt-name', text: t.name }),
+        el('span', { className: 'tt-vendor', text: t.vendor })]);
     }));
+    var addBtn = el('button', { type: 'button', className: 'add-other', id: 'addOther', text: '＋ 使用其他 AI 工具' });
+    addBtn.addEventListener('click', function () {
+      if (otherCount() >= S.MAX_OTHER_TOOLS) return;
+      var p = addPanel(null, true);
+      p.querySelector('[data-role="otherName"]').focus();
+    });
+    toolPanels = el('div', { className: 'tool-panels' });
+    return el('div', null, [grid, addBtn, toolPanels]);
   }
 
-  function detailBody(key) {
-    var otherText = el('input', {
-      type: 'text', className: 'opt-other-text', maxlength: '50',
-      placeholder: '請說明其他用途', 'aria-label': '其他用途說明', dataset: { role: 'purposeOther' }
-    });
-    otherText.hidden = true;
+  function otherCount() { return toolPanels.querySelectorAll('[data-other="1"]').length; }
 
-    var otherChk = el('input', { type: 'checkbox', value: '__other__', dataset: { role: 'purpose' } });
-    otherChk.addEventListener('change', function () {
-      otherText.hidden = !otherChk.checked;
-      if (otherChk.checked) otherText.focus();
-    });
+  function panelField(key, field, label, options) {
+    var name = 'tp-' + key + '-' + field;
+    return el('div', { className: 'tp-field', dataset: { field: field } }, [
+      el('div', { className: 'tp-field-label', id: name + '-lbl', text: label }),
+      el('div', { className: 'choices compact', role: 'radiogroup', 'aria-labelledby': name + '-lbl' },
+        options.map(function (o) { return choice('radio', name, o, o); }))
+    ]);
+  }
 
-    var purposeOpts = CFG.purposes.map(function (p) {
-      return el('label', { className: 'opt' }, [el('input', { type: 'checkbox', value: p, dataset: { role: 'purpose' } }), p]);
-    });
-    purposeOpts.push(el('label', { className: 'opt' }, [otherChk, '其他']));
-
-    return el('div', { className: 'tool-body' }, [
-      el('div', { className: 'field', dataset: { group: 'purpose' } }, [
-        el('span', { className: 'label' }, ['主要用途', el('span', { className: 'req', text: '*' }), el('span', { className: 'hint', text: '可複選' })]),
-        el('div', { className: 'options' }, purposeOpts),
-        otherText
-      ]),
-      el('div', { className: 'field', dataset: { group: 'frequency' } }, [
-        el('span', { className: 'label' }, ['預計使用頻率', el('span', { className: 'req', text: '*' })]),
-        radioGroup(key + '_freq', CFG.frequencies, 'inline')
-      ]),
-      el('div', { className: 'field', dataset: { group: 'status' } }, [
-        el('span', { className: 'label' }, ['目前是否已在使用', el('span', { className: 'req', text: '*' })]),
-        radioGroup(key + '_status', CFG.statuses, 'inline')
+  function addPanel(def, isOther) {
+    var key = isOther ? 'o' + (++otherSeq) : def.id;
+    var head;
+    if (isOther) {
+      var nameInput = el('input', { type: 'text', maxlength: '40', placeholder: '工具名稱，例如 Perplexity、NotebookLM', 'aria-label': '其他 AI 工具名稱', dataset: { role: 'otherName' } });
+      var rm = el('button', { type: 'button', className: 'tp-remove', text: '移除' });
+      head = el('div', { className: 'tp-head' }, [nameInput, rm]);
+    } else {
+      head = el('div', { className: 'tp-head' }, [el('span', { className: 'tp-name', text: def.name })]);
+    }
+    var payer = panelField(key, 'payer', '費用由誰支付', S.PAYERS);
+    payer.hidden = true;
+    var panel = el('div', { className: 'tool-panel is-new', dataset: { key: key, tool: isOther ? 'other' : def.id, other: isOther ? '1' : '0' } }, [
+      head,
+      el('div', { className: 'tp-body' }, [
+        panelField(key, 'plan', '使用的方案', isOther ? S.OTHER_PLANS : def.plans),
+        payer,
+        panelField(key, 'account', '用哪個帳號登入', S.ACCOUNTS),
+        panelField(key, 'frequency', '使用頻率', S.TOOL_FREQ)
       ])
     ]);
+    if (isOther) {
+      head.querySelector('.tp-remove').addEventListener('click', function () { panel.remove(); update(); });
+    }
+    // 固定工具依畫面順序排列，其他工具排在最後
+    if (!isOther) {
+      var order = S.TOOLS.map(function (t) { return t.id; });
+      var next = Array.prototype.filter.call(toolPanels.children, function (p) {
+        return p.dataset.other === '1' || order.indexOf(p.dataset.tool) > order.indexOf(def.id);
+      })[0];
+      toolPanels.insertBefore(panel, next || null);
+    } else {
+      toolPanels.appendChild(panel);
+    }
+    update();
+    return panel;
   }
 
-  function fixedToolCard(tool) {
-    var key = 't_' + tool.id;
-    var body = detailBody(key);
-    body.hidden = true;
+  function removePanel(id) {
+    var p = toolPanels.querySelector('[data-tool="' + id + '"]');
+    if (p) p.remove();
+    update();
+  }
 
-    var card = el('div', { className: 'tool', dataset: { toolId: tool.id, key: key } });
-    var seg = el('div', { className: 'seg', role: 'radiogroup', 'aria-label': tool.name + ' 是否需要' }, [
-      el('input', { type: 'radio', name: key + '_need', id: key + '_y', value: 'yes' }),
-      el('label', { 'for': key + '_y', text: '需要' }),
-      el('input', { type: 'radio', name: key + '_need', id: key + '_n', value: 'no' }),
-      el('label', { 'for': key + '_n', text: '不需要' })
-    ]);
-    seg.addEventListener('change', function () {
-      var need = seg.querySelector('input:checked').value === 'yes';
-      body.hidden = !need;
-      card.classList.toggle('is-needed', need);
-      seg.classList.remove('invalid');
-    });
+  /* ---------- 建立各區段與進度欄 ---------- */
+  var stepsEl = $('steps');
+  S.SECTIONS.forEach(function (sec, i) {
+    var children = [
+      el('h2', null, [el('span', { className: 'sec-no', text: String(i + 1) }), sec.title]),
+      el('p', { className: 'sec-desc', text: sec.desc })
+    ];
+    // 部門與姓名並排
+    if (sec.id === 'basic') {
+      children.push(el('div', { className: 'field-row' }, [buildQuestion(sec.questions[0]), buildQuestion(sec.questions[1])]));
+      sec.questions.slice(2).forEach(function (q) { children.push(buildQuestion(q)); });
+    } else {
+      sec.questions.forEach(function (q) { children.push(buildQuestion(q)); });
+    }
+    sectionsEl.appendChild(el('section', { className: 'sec', id: 'sec-' + sec.id, 'aria-labelledby': 'h-' + sec.id }, children));
+    children[0].id = 'h-' + sec.id;
 
-    card.appendChild(el('div', { className: 'tool-head' }, [
-      el('div', null, [
-        el('div', { className: 'tool-name', text: tool.name }),
-        el('div', { className: 'tool-vendor', text: tool.vendor })
-      ]),
-      seg
+    stepsEl.appendChild(el('li', { id: 'step-' + sec.id }, [
+      el('a', { href: '#sec-' + sec.id }, [
+        el('span', { className: 'step-no', text: String(i + 1) }),
+        el('span', { text: sec.title }),
+        el('span', { className: 'step-count' })
+      ])
     ]));
-    card.appendChild(body);
-    return card;
-  }
-
-  function otherToolCard() {
-    otherSeq += 1;
-    var key = 'o_' + otherSeq;
-    var card = el('div', { className: 'tool is-needed', dataset: { toolId: 'other', key: key } });
-    var nameInput = el('input', {
-      type: 'text', maxlength: '40', placeholder: '工具名稱，例如：Perplexity、NotebookLM',
-      'aria-label': '其他工具名稱', dataset: { role: 'otherName' }
-    });
-    var removeBtn = el('button', { type: 'button', className: 'tool-remove', text: '移除' });
-    removeBtn.addEventListener('click', function () {
-      card.remove();
-      refreshAddBtn();
-    });
-    card.appendChild(el('div', { className: 'tool-head' }, [
-      el('div', { className: 'grow' }, [
-        el('div', { className: 'tool-vendor', text: '其他 AI 工具' }),
-        nameInput
-      ]),
-      removeBtn
-    ]));
-    card.appendChild(detailBody(key));
-    return card;
-  }
-
-  function refreshAddBtn() {
-    addOtherBtn.disabled = otherList.children.length >= (CFG.maxOtherTools || 5);
-  }
-
-  CFG.tools.forEach(function (t) { toolList.appendChild(fixedToolCard(t)); });
-  addOtherBtn.addEventListener('click', function () {
-    if (otherList.children.length >= (CFG.maxOtherTools || 5)) return;
-    var card = otherToolCard();
-    otherList.appendChild(card);
-    card.querySelector('[data-role="otherName"]').focus();
-    refreshAddBtn();
   });
 
-  // 使用者修正後清除錯誤標示
-  form.addEventListener('input', function (e) {
-    e.target.classList.remove('invalid');
-    var g = e.target.closest('[data-group]');
-    if (g) g.classList.remove('group-invalid');
-  });
+  /* ================= 互動 ================= */
+
+  // 「其他」勾選時顯示說明欄；互斥選項（例如「目前不需要」）會取消其他勾選
   form.addEventListener('change', function (e) {
-    var g = e.target.closest('[data-group]');
-    if (g) g.classList.remove('group-invalid');
-    e.target.classList.remove('invalid');
+    var t = e.target;
+    if (t.type === 'checkbox' && t.name) {
+      var q = findQ(t.name);
+      if (q && q.exclusive) {
+        var boxes = form.querySelectorAll('input[name="' + t.name + '"]');
+        if (t.checked && t.value === q.exclusive) {
+          boxes.forEach(function (b) { if (b !== t) b.checked = false; });
+        } else if (t.checked) {
+          boxes.forEach(function (b) { if (b.value === q.exclusive) b.checked = false; });
+        }
+      }
+      if (q && q.other) {
+        var oi = form.querySelector('[data-other-for="' + t.name + '"]');
+        var on = !!form.querySelector('input[name="' + t.name + '"][value="__other__"]:checked');
+        oi.hidden = !on;
+        if (on && t.value === '__other__') oi.focus();
+      }
+    }
+    update();
   });
+  form.addEventListener('input', function (e) { if (e.target.type === 'text' || e.target.tagName === 'TEXTAREA') update(); });
 
-  // ---------- 收集與驗證 ----------
-  function readDetail(card, key, errors, label) {
-    var purposes = [];
-    var purposeOther = '';
-    card.querySelectorAll('[data-role="purpose"]:checked').forEach(function (c) {
-      if (c.value === '__other__') purposeOther = 'pending';
-      else purposes.push(c.value);
-    });
-    var otherInput = card.querySelector('[data-role="purposeOther"]');
-    var purposeGroup = card.querySelector('[data-group="purpose"]');
-    if (purposeOther) {
-      purposeOther = otherInput.value.trim();
-      if (!purposeOther) {
-        otherInput.classList.add('invalid');
-        errors.push({ node: otherInput, msg: label + '：請說明「其他」用途' });
+  function findQ(id) {
+    for (var i = 0; i < S.SECTIONS.length; i++) {
+      for (var j = 0; j < S.SECTIONS[i].questions.length; j++) {
+        if (S.SECTIONS[i].questions[j].id === id) return S.SECTIONS[i].questions[j];
       }
     }
-    if (!purposes.length && !purposeOther && !card.querySelector('[data-role="purpose"][value="__other__"]:checked')) {
-      purposeGroup.classList.add('group-invalid');
-      errors.push({ node: purposeGroup, msg: label + '：請至少勾選一項用途' });
-    }
+    return null;
+  }
 
-    function radio(name, group, msg) {
-      var c = card.querySelector('input[name="' + name + '"]:checked');
-      if (!c) {
-        var g = card.querySelector('[data-group="' + group + '"]');
-        g.classList.add('group-invalid');
-        errors.push({ node: g, msg: label + '：' + msg });
-        return '';
-      }
-      return c.value;
-    }
-    return {
-      need: true,
-      purposes: purposes,
-      purposeOther: purposeOther,
-      frequency: radio(key + '_freq', 'frequency', '請選擇使用頻率'),
-      status: radio(key + '_status', 'status', '請選擇目前使用狀況')
-    };
+  /* ---------- 收集填答 ---------- */
+  function radioVal(name) {
+    var c = form.querySelector('input[name="' + name + '"]:checked');
+    return c ? c.value : '';
   }
 
   function collect() {
-    var errors = [];
-    // 每次重新檢查前先清除上一次的錯誤標示
-    form.querySelectorAll('.invalid').forEach(function (n) { n.classList.remove('invalid'); });
-    form.querySelectorAll('.group-invalid').forEach(function (n) { n.classList.remove('group-invalid'); });
-
-    var dept = deptSel.value;
-    var nameEl = document.getElementById('name');
-    var name = nameEl.value.replace(/\s+/g, ' ').trim();
-
-    if (CFG.departments.indexOf(dept) < 0) { deptSel.classList.add('invalid'); errors.push({ node: deptSel, msg: '請選擇部門' }); }
-    if (!/[\p{L}]/u.test(name)) { nameEl.classList.add('invalid'); errors.push({ node: nameEl, msg: '請填寫姓名' }); }
-
-    var tools = [];
-    toolList.querySelectorAll('.tool').forEach(function (card) {
-      var id = card.dataset.toolId;
-      var key = card.dataset.key;
-      var tool = CFG.tools.filter(function (t) { return t.id === id; })[0];
-      var needInput = card.querySelector('input[name="' + key + '_need"]:checked');
-      if (!needInput) {
-        var seg = card.querySelector('.seg');
-        seg.classList.add('invalid');
-        errors.push({ node: seg, msg: tool.name + '：請選擇「需要」或「不需要」' });
-        return;
-      }
-      if (needInput.value === 'no') {
-        tools.push({ id: id, name: tool.name, other: false, need: false });
-        return;
-      }
-      var d = readDetail(card, key, errors, tool.name);
-      d.id = id; d.name = tool.name; d.other = false;
-      tools.push(d);
+    var raw = { schemaVersion: S.version, website: $('website').value };
+    var panelKeys = [];
+    S.SECTIONS.forEach(function (sec) {
+      sec.questions.forEach(function (q) {
+        if (q.type === 'select' || q.type === 'text' || q.type === 'textarea') {
+          raw[q.id] = $('f-' + q.id).value;
+        } else if (q.type === 'radio') {
+          raw[q.id] = radioVal(q.id);
+        } else if (q.type === 'checkbox') {
+          raw[q.id] = Array.prototype.map.call(form.querySelectorAll('input[name="' + q.id + '"]:checked'), function (c) { return c.value; })
+            .filter(function (v) { return v !== '__other__'; });
+          if (q.other) {
+            var on = !!form.querySelector('input[name="' + q.id + '"][value="__other__"]:checked');
+            raw[q.id + 'Other'] = on ? form.querySelector('[data-other-for="' + q.id + '"]').value : '';
+          }
+        } else if (q.type === 'tools') {
+          raw.tools = Array.prototype.map.call(toolPanels.children, function (p) {
+            var key = p.dataset.key;
+            panelKeys.push(p);
+            var isOther = p.dataset.other === '1';
+            return {
+              id: isOther ? 'other' : p.dataset.tool,
+              other: isOther,
+              name: isOther ? p.querySelector('[data-role="otherName"]').value : '',
+              plan: radioVal('tp-' + key + '-plan'),
+              payer: radioVal('tp-' + key + '-payer'),
+              account: radioVal('tp-' + key + '-account'),
+              frequency: radioVal('tp-' + key + '-frequency')
+            };
+          });
+        }
+      });
     });
-
-    var nameKey = function (s) { return s.replace(/\s+/g, '').toLowerCase(); };
-    var usedNames = {};
-    CFG.tools.forEach(function (t) { usedNames[nameKey(t.name)] = 'builtin'; });
-    otherList.querySelectorAll('.tool').forEach(function (card, i) {
-      var nameInput = card.querySelector('[data-role="otherName"]');
-      var toolName = nameInput.value.replace(/\s+/g, ' ').trim();
-      var label = toolName || ('其他工具 ' + (i + 1));
-      var k = nameKey(toolName);
-      if (!toolName) {
-        nameInput.classList.add('invalid');
-        errors.push({ node: nameInput, msg: label + '：請填寫工具名稱（不需要的話請按「移除」）' });
-      } else if (usedNames[k]) {
-        nameInput.classList.add('invalid');
-        errors.push({ node: nameInput, msg: usedNames[k] === 'builtin'
-          ? label + '：已列在上方工具中，請直接在上方選擇，並移除這一項'
-          : label + '：重複填寫，請移除其中一項' });
-      }
-      if (k) usedNames[k] = usedNames[k] || 'other';
-      var d = readDetail(card, card.dataset.key, errors, label);
-      d.id = 'other'; d.name = toolName; d.other = true;
-      tools.push(d);
-    });
-
-    return {
-      errors: errors,
-      data: {
-        dept: dept,
-        name: name,
-        website: document.getElementById('website').value,
-        comment: document.getElementById('comment').value.trim(),
-        tools: tools
-      }
-    };
+    return { raw: raw, panels: panelKeys };
   }
 
-  function showErrors(errors) {
-    formError.textContent = '';
-    formError.appendChild(el('strong', { text: '還有 ' + errors.length + ' 個地方需要填寫：' }));
-    formError.appendChild(el('ul', null, errors.slice(0, 8).map(function (e) { return el('li', { text: e.msg }); })));
-    formError.hidden = false;
-    var first = errors[0].node;
-    first.scrollIntoView({ behavior: 'smooth', block: 'center' });
-    if (typeof first.focus === 'function' && /INPUT|SELECT|TEXTAREA/.test(first.tagName)) first.focus({ preventScroll: true });
+  /* ---------- 依驗證結果更新畫面 ---------- */
+  var lastResult = null;
+
+  function update() {
+    var c = collect();
+    var r = S.validate(c.raw);
+    lastResult = { raw: c.raw, panels: c.panels, result: r };
+
+    // 選取狀態
+    form.querySelectorAll('.choice').forEach(function (l) { l.classList.toggle('on', l.querySelector('input').checked); });
+    form.querySelectorAll('.tool-tile').forEach(function (l) { l.classList.toggle('on', l.querySelector('input').checked); });
+
+    // 付費方案才顯示「費用由誰支付」
+    Array.prototype.forEach.call(toolPanels.children, function (p) {
+      var plan = radioVal('tp-' + p.dataset.key + '-plan');
+      var payer = p.querySelector('[data-field="payer"]');
+      var show = S.isPaidPlan(plan);
+      if (!show) payer.querySelectorAll('input').forEach(function (i) { i.checked = false; });
+      payer.hidden = !show;
+    });
+    $('addOther').disabled = otherCount() >= S.MAX_OTHER_TOOLS;
+
+    // 條件題顯示、題號、進度
+    var no = 0, total = 0, done = 0;
+    r.sections.forEach(function (s) {
+      $('sec-' + s.id).hidden = !s.visible;
+      s.questions.forEach(function (qs) {
+        var node = $('q-' + qs.id);
+        node.hidden = !qs.visible;
+        if (qs.visible) {
+          node.querySelector('.q-no').textContent = (++no) + '.';
+          if (lastVisible[qs.id] === false) {
+            node.classList.remove('is-new'); void node.offsetWidth; node.classList.add('is-new');
+          }
+        }
+        lastVisible[qs.id] = qs.visible;
+      });
+      total += s.visible ? s.total : 0;
+      done += s.visible ? s.done : 0;
+
+      var step = $('step-' + s.id);
+      step.classList.toggle('is-skip', !s.visible);
+      step.classList.toggle('is-done', s.visible && s.total > 0 && s.done === s.total);
+      step.querySelector('.step-count').textContent = s.visible ? s.done + '／' + s.total : '免填';
+    });
+
+    $('mpText').textContent = '已完成 ' + done + '／' + total + ' 題';
+    $('mpFill').style.width = (total ? (done / total) * 100 : 0) + '%';
+    $('submitStatus').textContent = done === total ? '都填好了，可以送出。' : '還有 ' + (total - done) + ' 題必填未完成';
+
+    if (attempted) showErrors(r.errors, c.panels, false);
   }
 
-  function showDone(data, res) {
-    form.hidden = true;
-    var view = document.getElementById('doneView');
-    var updated = res && res.updated;
-    document.getElementById('doneText').textContent =
-      data.dept + ' ' + data.name + '，您的填答已' + (updated ? '更新' : '送出') +
-      (res && res.time ? '（' + C.formatTime(res.time) + '）' : '') + '。以下是您的需求摘要：';
-    var list = document.getElementById('doneSummary');
-    list.textContent = '';
-    var needed = data.tools.filter(function (t) { return t.need; });
-    if (!needed.length) {
-      list.appendChild(el('li', { text: '目前沒有需要的 AI 工具。' }));
+  function showErrors(errors, panels, scroll) {
+    form.querySelectorAll('.q.has-error').forEach(function (n) { n.classList.remove('has-error'); });
+    form.querySelectorAll('.q-error').forEach(function (n) { n.hidden = true; n.textContent = ''; });
+    form.querySelectorAll('.tp-field.has-error').forEach(function (n) { n.classList.remove('has-error'); });
+    form.querySelectorAll('input.invalid').forEach(function (n) { n.classList.remove('invalid'); });
+
+    var firstNode = null;
+    errors.forEach(function (e) {
+      var q = $('q-' + e.id);
+      if (!q) return;
+      q.classList.add('has-error');
+      var target = q;
+      if (e.tool) {
+        var panel = e.tool.indexOf('other') === 0 ? panels[Number(e.tool.slice(5))] : toolPanels.querySelector('[data-tool="' + e.tool + '"]');
+        if (panel) {
+          if (e.field === 'name') { var ni = panel.querySelector('[data-role="otherName"]'); ni.classList.add('invalid'); target = ni; }
+          else { var f = panel.querySelector('[data-field="' + e.field + '"]'); if (f) { f.classList.add('has-error'); target = f; } }
+        }
+      }
+      var box = $('err-' + e.id);
+      if (!box.textContent) { box.textContent = e.msg; box.hidden = false; }
+      if (!firstNode) firstNode = target;
+    });
+
+    var eb = $('errorBox');
+    if (errors.length) {
+      eb.textContent = '';
+      eb.appendChild(el('strong', { text: '還有 ' + errors.length + ' 個地方需要填寫或修正：' }));
+      eb.appendChild(el('ul', null, errors.slice(0, 6).map(function (e) { return el('li', { text: e.msg }); })));
+      eb.hidden = false;
+    } else {
+      eb.hidden = true;
     }
-    needed.forEach(function (t) {
-      var uses = t.purposes.slice();
-      if (t.purposeOther) uses.push('其他：' + t.purposeOther);
-      list.appendChild(el('li', null, [
-        el('strong', { text: t.name }),
-        '　' + t.frequency + '・' + t.status,
-        el('br'),
-        el('span', { className: 'hint', text: '用途：' + uses.join('、') })
-      ]));
-    });
-    view.hidden = false;
-    window.scrollTo({ top: 0, behavior: 'smooth' });
+    if (scroll && firstNode) {
+      firstNode.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      var focusable = firstNode.matches && firstNode.matches('input, select, textarea') ? firstNode : firstNode.querySelector('input:not([type="hidden"]), select, textarea');
+      if (focusable) focusable.focus({ preventScroll: true });
+    }
   }
 
-  document.getElementById('againBtn').addEventListener('click', function () {
-    document.getElementById('doneView').hidden = true;
-    form.hidden = false;
-    window.scrollTo({ top: 0, behavior: 'smooth' });
-  });
-
+  /* ---------- 送出 ---------- */
   form.addEventListener('submit', function (e) {
     e.preventDefault();
     if (submitting || !C.apiReady()) return;
-    formError.hidden = true;
-    var r = collect();
-    if (r.errors.length) { showErrors(r.errors); return; }
+    attempted = true;
+    update();
+    var r = lastResult.result;
+    if (r.errors.length) { showErrors(r.errors, lastResult.panels, true); return; }
 
     submitting = true;
     submitBtn.disabled = true;
     submitBtn.textContent = '送出中…';
-    C.callApi({ action: 'submit', data: r.data }).then(function (res) {
+    var data = r.data;
+    C.callApi({ action: 'submit', data: lastResult.raw }).then(function (res) {
       if (!res || !res.ok) throw new Error((res && res.error) || '送出失敗，請稍後再試');
-      showDone(r.data, res);
+      showDone(data, res);
     }).catch(function (err) {
-      formError.textContent = '送出失敗：' + err.message;
-      formError.hidden = false;
-      formError.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      var eb = $('errorBox');
+      eb.textContent = '送出失敗：' + err.message;
+      eb.hidden = false;
+      eb.scrollIntoView({ behavior: 'smooth', block: 'center' });
     }).finally(function () {
       submitting = false;
       submitBtn.disabled = false;
       submitBtn.textContent = '送出問卷';
     });
   });
+
+  function showDone(d, res) {
+    form.hidden = true;
+    $('doneText').textContent = d.dept + ' ' + d.name + '，你的填答已' + (res.updated ? '更新' : '送出') +
+      (res.time ? '（' + C.formatTime(res.time) + '）' : '') + '。如需修改，按下方「修改填答」重新送出即可。';
+    var sum = $('doneSummary');
+    sum.textContent = '';
+    function row(k, v) { sum.appendChild(el('dt', { text: k })); sum.appendChild(el('dd', { text: v || '—' })); }
+    row('目前使用情況', d.usage);
+    if (d.tools.length) row('使用中的工具', d.tools.map(function (t) { return t.name + '（' + t.plan + '）'; }).join('、'));
+    row('希望公司提供', d.wantTools.concat(d.wantToolsOther ? [d.wantToolsOther] : []).join('、'));
+    row('希望的支援', d.support.concat(d.supportOther ? [d.supportOther] : []).join('、'));
+    $('doneView').hidden = false;
+    $('doneView').focus({ preventScroll: true });
+    $('doneView').scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }
+
+  $('againBtn').addEventListener('click', function () {
+    $('doneView').hidden = true;
+    form.hidden = false;
+    $('sec-basic').scrollIntoView({ behavior: 'smooth' });
+  });
+
+  /* ---------- 進度欄標示目前區段 ---------- */
+  if ('IntersectionObserver' in window) {
+    var io = new IntersectionObserver(function (entries) {
+      entries.forEach(function (en) {
+        if (!en.isIntersecting) return;
+        var id = en.target.id.replace('sec-', '');
+        stepsEl.querySelectorAll('li').forEach(function (li) { li.classList.toggle('is-current', li.id === 'step-' + id); });
+      });
+    }, { rootMargin: '-30% 0px -60% 0px' });
+    sectionsEl.querySelectorAll('.sec').forEach(function (s) { io.observe(s); });
+  }
+
+  update();
 })();
