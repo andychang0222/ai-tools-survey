@@ -35,7 +35,7 @@
 1. 編輯 `assets/schema.js`。
 2. 把 `version` 加 1（例如 3 → 4），舊版網頁送出時會被要求重新整理，避免新舊資料混在一起。
 3. 執行 `node apps-script/build.js` 產生新的 `Code.gs`。
-4. 把 `index.html`、`admin.html` 裡的 `?v=6` 改成下一個數字，避免同仁瀏覽器用到舊檔。
+4. 把 `index.html`、`admin.html` 裡的 `?v=7` 改成下一個數字，避免同仁瀏覽器用到舊檔。
 5. 推上 GitHub，並依下方「更新後端」把新的 `Code.gs` 部署到 Apps Script。
 
 調查開始後請不要改既有選項的文字，否則統計會分成兩類。
