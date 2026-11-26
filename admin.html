@@ -1,0 +1,113 @@
+<!doctype html>
+<html lang="zh-Hant-TW">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data: blob:; connect-src https://script.google.com https://script.googleusercontent.com; form-action 'none'; base-uri 'none'; object-src 'none'">
+  <meta name="referrer" content="no-referrer">
+  <meta name="robots" content="noindex, nofollow">
+  <title>調查統計｜AI 工具使用需求調查</title>
+  <link rel="stylesheet" href="assets/style.css?v=1">
+</head>
+<body class="wide">
+  <div class="topbar"></div>
+  <header class="site-header">
+    <div class="inner">
+      <div class="brand-mark" aria-hidden="true">八貫</div>
+      <div class="brand-text">
+        <div class="brand-zh" data-cfg="companyZh">八貫企業股份有限公司</div>
+        <div class="brand-en" data-cfg="companyEn">Cathay Consolidated, Inc</div>
+      </div>
+      <div class="header-unit"><span data-cfg="issuer">資訊單位</span>・統計管理</div>
+    </div>
+  </header>
+
+  <main>
+    <section class="doc-head">
+      <p class="doc-kicker">管理人員專用</p>
+      <h1>AI 工具使用需求調查・統計</h1>
+      <p class="intro" id="introText">請輸入管理密碼查看統計結果。資料來源為 Google 試算表，同部門同姓名以最後一次填寫為準。</p>
+    </section>
+
+    <div id="configAlert" class="alert alert-warn" hidden>尚未設定資料接收網址（assets/config.js 的 apiUrl）。</div>
+
+    <section class="section login-box" id="loginView">
+      <div class="section-body">
+        <form id="loginForm" novalidate>
+          <div class="field">
+            <label class="label" for="pw">管理密碼</label>
+            <input type="password" id="pw" autocomplete="current-password" required>
+          </div>
+          <div id="loginError" class="alert alert-err" hidden></div>
+          <button type="submit" class="btn" id="loginBtn">查看統計</button>
+        </form>
+      </div>
+    </section>
+
+    <div id="statsView" hidden>
+      <div class="section">
+        <div class="section-body toolbar">
+          <label class="label" for="deptFilter">部門篩選</label>
+          <select id="deptFilter"></select>
+          <span class="spacer"></span>
+          <span class="updated" id="updatedAt"></span>
+          <button type="button" class="btn btn-ghost btn-sm" id="reloadBtn">重新整理</button>
+          <button type="button" class="btn btn-ghost btn-sm" id="csvBtn">匯出明細 CSV</button>
+          <button type="button" class="btn btn-ghost btn-sm" id="logoutBtn">登出</button>
+        </div>
+      </div>
+
+      <div class="kpis" id="kpis"></div>
+
+      <section class="section">
+        <div class="section-head"><span class="section-no">一、</span><h2>各工具需求與使用狀況</h2><p>人數</p></div>
+        <div class="section-body">
+          <div class="legend" id="statusLegend"></div>
+          <div class="table-wrap" id="toolTable"></div>
+        </div>
+      </section>
+
+      <section class="section">
+        <div class="section-head"><span class="section-no">二、</span><h2>各部門需求人數</h2><p>部門 × 工具，顏色越深人數越多</p></div>
+        <div class="section-body"><div class="table-wrap" id="deptTable"></div></div>
+      </section>
+
+      <section class="section">
+        <div class="section-head"><span class="section-no">三、</span><h2>使用頻率分布</h2><p>需要該工具的人數</p></div>
+        <div class="section-body"><div class="table-wrap" id="freqTable"></div></div>
+      </section>
+
+      <section class="section">
+        <div class="section-head"><span class="section-no">四、</span><h2>用途分布</h2><p>可複選，人次</p></div>
+        <div class="section-body"><div class="table-wrap" id="purposeTable"></div></div>
+      </section>
+
+      <section class="section">
+        <div class="section-head"><span class="section-no">五、</span><h2>其他工具與其他用途</h2><p>填答人自行輸入</p></div>
+        <div class="section-body"><div class="table-wrap" id="otherTable"></div></div>
+      </section>
+
+      <section class="section">
+        <div class="section-head"><span class="section-no">六、</span><h2>填答名單</h2><p id="listCount"></p></div>
+        <div class="section-body">
+          <div class="field">
+            <input type="text" id="search" placeholder="搜尋姓名或工具" aria-label="搜尋姓名或工具">
+          </div>
+          <div class="table-wrap" id="listTable"></div>
+        </div>
+      </section>
+    </div>
+  </main>
+
+  <footer class="site-footer">
+    <div class="inner">
+      <span><span data-cfg="companyZh">八貫企業股份有限公司</span>　<span data-cfg="issuer">資訊單位</span></span>
+      <span>本頁資料含同仁姓名，請勿外流。</span>
+    </div>
+  </footer>
+
+  <script src="assets/config.js?v=1"></script>
+  <script src="assets/common.js?v=1"></script>
+  <script src="assets/admin.js?v=1"></script>
+</body>
+</html>

@@ -1,0 +1,146 @@
+<!doctype html>
+<html lang="zh-Hant-TW">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src https://script.google.com https://script.googleusercontent.com; form-action 'none'; base-uri 'none'; object-src 'none'">
+  <meta name="referrer" content="no-referrer">
+  <meta name="robots" content="noindex, nofollow">
+  <title>AI 工具使用需求調查｜八貫企業股份有限公司 資訊單位</title>
+  <link rel="stylesheet" href="assets/style.css?v=1">
+</head>
+<body>
+  <div class="topbar"></div>
+  <header class="site-header">
+    <div class="inner">
+      <div class="brand-mark" aria-hidden="true">八貫</div>
+      <div class="brand-text">
+        <div class="brand-zh" data-cfg="companyZh">八貫企業股份有限公司</div>
+        <div class="brand-en" data-cfg="companyEn">Cathay Consolidated, Inc</div>
+      </div>
+      <div class="header-unit"><span data-cfg="issuer">資訊單位</span>・內部調查</div>
+    </div>
+  </header>
+
+  <main>
+    <section class="doc-head">
+      <p class="doc-kicker">內部問卷調查</p>
+      <h1>AI 工具使用需求調查</h1>
+      <dl class="doc-meta">
+        <div><dt>發起單位</dt><dd data-cfg="issuer">資訊單位</dd></div>
+        <div><dt>填寫對象</dt><dd>全體同仁</dd></div>
+        <div><dt>填寫時間</dt><dd>約 3 分鐘</dd></div>
+        <div id="deadlineRow" hidden><dt>截止日期</dt><dd id="deadlineText"></dd></div>
+      </dl>
+      <p class="intro">
+        為規劃公司 AI 工具的導入與授權採購，資訊單位想了解各部門同仁對 AI 工具的實際需求。
+        請依您的工作情況，勾選需要的工具、主要用途、預計使用頻率，以及目前是否已在使用。
+      </p>
+      <div class="notice">
+        <strong>填寫須知</strong>
+        <ul>
+          <li>本調查<strong>只收集部門與姓名</strong>，不會要求您輸入任何帳號、密碼、員工編號或其他個人資料。</li>
+          <li>若有人以本調查名義要求您提供帳號或密碼，請勿理會，並通報資訊單位。</li>
+          <li>填答結果僅供公司內部規劃 AI 工具使用，不作其他用途。</li>
+          <li>送出後如需修改，重新填寫並送出即可，系統以<strong>同部門、同姓名的最後一次填寫</strong>為準。</li>
+        </ul>
+      </div>
+    </section>
+
+    <div id="configAlert" class="alert alert-warn" hidden>
+      本調查尚未開放填寫（資料接收網址未設定）。如有疑問請洽資訊單位。
+    </div>
+
+    <form id="surveyForm" novalidate>
+      <section class="section">
+        <div class="section-head">
+          <span class="section-no">一、</span>
+          <h2>基本資料</h2>
+        </div>
+        <div class="section-body">
+          <div class="field-row">
+            <div class="field">
+              <label class="label" for="dept">部門<span class="req">*</span></label>
+              <select id="dept" name="dept" required>
+                <option value="">請選擇部門</option>
+              </select>
+            </div>
+            <div class="field">
+              <label class="label" for="name">姓名<span class="req">*</span></label>
+              <input type="text" id="name" name="name" maxlength="20" autocomplete="name" required placeholder="請填寫中文全名">
+            </div>
+          </div>
+          <div class="hp" aria-hidden="true">
+            <label for="website">請勿填寫此欄</label>
+            <input type="text" id="website" name="website" tabindex="-1" autocomplete="off">
+          </div>
+        </div>
+      </section>
+
+      <section class="section">
+        <div class="section-head">
+          <span class="section-no">二、</span>
+          <h2>AI 工具需求</h2>
+          <p>每項工具請選擇「需要」或「不需要」</p>
+        </div>
+        <div class="section-body" id="toolList"></div>
+      </section>
+
+      <section class="section">
+        <div class="section-head">
+          <span class="section-no">三、</span>
+          <h2>其他 AI 工具</h2>
+          <p>選填：上面沒有列出、但您需要的工具</p>
+        </div>
+        <div class="section-body">
+          <div id="otherList"></div>
+          <div class="other-tools-actions">
+            <button type="button" class="btn btn-ghost btn-sm" id="addOther">＋ 新增其他工具</button>
+          </div>
+        </div>
+      </section>
+
+      <section class="section">
+        <div class="section-head">
+          <span class="section-no">四、</span>
+          <h2>其他意見</h2>
+          <p>選填</p>
+        </div>
+        <div class="section-body">
+          <div class="field">
+            <label class="label" for="comment">對公司導入 AI 工具的建議或想法</label>
+            <textarea id="comment" name="comment" maxlength="500" placeholder="例如：希望提供教育訓練、需要哪些功能等"></textarea>
+          </div>
+        </div>
+      </section>
+
+      <div id="formError" class="alert alert-err" hidden></div>
+
+      <div class="submit-bar">
+        <button type="submit" class="btn" id="submitBtn">送出問卷</button>
+        <span class="note">送出後如需修改，重新填寫即可。</span>
+      </div>
+    </form>
+
+    <section class="section" id="doneView" hidden>
+      <div class="section-body done">
+        <h2>已收到您的填答，謝謝！</h2>
+        <p id="doneText"></p>
+        <ul class="summary-list" id="doneSummary"></ul>
+        <p><button type="button" class="btn btn-ghost btn-sm" id="againBtn">修改填答</button></p>
+      </div>
+    </section>
+  </main>
+
+  <footer class="site-footer">
+    <div class="inner">
+      <span><span data-cfg="companyZh">八貫企業股份有限公司</span>　<span data-cfg="issuer">資訊單位</span></span>
+      <span data-cfg="contact">如對本調查有任何疑問，請洽資訊單位。</span>
+    </div>
+  </footer>
+
+  <script src="assets/config.js?v=1"></script>
+  <script src="assets/common.js?v=1"></script>
+  <script src="assets/survey.js?v=1"></script>
+</body>
+</html>
