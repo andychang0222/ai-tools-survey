@@ -41,7 +41,7 @@ var SurveySchema = (function () {
 
   var SECTIONS = [
     {
-      id: 'basic', title: '基本資料', desc: '只用來統計部門需求，不會要求任何帳號或員工編號。',
+      id: 'basic', title: '基本資料', desc: '只用來依部門統計，不會要求任何帳號或員工編號。',
       questions: [
         { id: 'dept', type: 'select', label: '部門', short: '部門', options: DEPARTMENTS, required: true },
         { id: 'name', type: 'text', label: '姓名', short: '姓名', max: 20, required: true, letter: true, placeholder: '請填寫中文全名' },
@@ -81,23 +81,6 @@ var SurveySchema = (function () {
           options: ['知道，而且已關閉相關設定', '知道，但沒有特別設定', '不知道'] },
         { id: 'verify', type: 'radio', label: '使用 AI 產出的內容前，你會查核正確性嗎？', short: '查核習慣', required: true,
           options: ['每次都會', '重要的才會', '很少查核'] }
-      ]
-    },
-    {
-      id: 'needs', title: '需求與期望', desc: '公司會依大家的需求，規劃授權採購、教育訓練與使用規範。',
-      questions: [
-        { id: 'wantTools', type: 'checkbox', label: '希望公司提供或授權哪些 AI 工具', short: '希望提供的工具', hint: '可複選', required: true, other: true,
-          exclusive: '目前不需要', options: ['ChatGPT', 'Claude', 'Gemini', 'Microsoft 365 Copilot', '目前不需要'] },
-        { id: 'wantFrequency', type: 'radio', label: '如果公司提供，你預計多久使用一次', short: '預計使用頻率', required: true,
-          showIf: { q: 'wantTools', anyExcept: '目前不需要' }, options: TOOL_FREQ.concat(['偶爾']) },
-        { id: 'futureTasks', type: 'checkbox', label: '希望 AI 協助哪些工作', short: '希望的用途', hint: '可複選，可以和目前的用途相同', required: true, other: true, options: TASKS },
-        { id: 'support', type: 'checkbox', label: '希望公司提供哪些支援', short: '希望的支援', hint: '可複選', required: true, other: true,
-          exclusive: '不需要',
-          options: ['統一採購企業版帳號', 'AI 教育訓練課程', 'AI 使用規範與資安指引', '各部門使用案例與範本', '專人諮詢窗口', '不需要'] },
-        { id: 'policy', type: 'radio', label: '你認為公司應該怎麼管理 AI 的使用', short: '管理方式', required: true,
-          options: ['統一提供工具，並明訂使用規範', '提供指引，讓同仁自行選擇工具', '不需要特別規範', '沒有意見'] },
-        { id: 'comment', type: 'textarea', label: '其他意見或建議', short: '其他意見', hint: '選填', max: 500,
-          placeholder: '例如：希望開哪些課程、擔心什麼、想要什麼功能' }
       ]
     }
   ];
@@ -267,7 +250,7 @@ var SurveySchema = (function () {
   }
 
   return {
-    version: 2,
+    version: 3,
     DEPARTMENTS: DEPARTMENTS,
     TOOLS: TOOLS,
     OTHER_PLANS: OTHER_PLANS,

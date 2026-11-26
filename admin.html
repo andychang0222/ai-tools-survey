@@ -6,9 +6,9 @@
   <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data: blob:; connect-src https://script.google.com https://script.googleusercontent.com; form-action 'none'; base-uri 'none'; object-src 'none'">
   <meta name="referrer" content="no-referrer">
   <meta name="robots" content="noindex, nofollow">
-  <title>調查統計｜AI 工具使用現況與需求調查</title>
+  <title>調查統計｜AI 工具使用現況調查</title>
   <link rel="icon" href="assets/img/favicon.png">
-  <link rel="stylesheet" href="assets/style.css?v=4">
+  <link rel="stylesheet" href="assets/style.css?v=5">
 </head>
 <body>
   <header class="topbar">
@@ -20,7 +20,7 @@
 
   <section class="admin-band">
     <div class="inner">
-      <h1>AI 工具使用現況與需求調查・統計</h1>
+      <h1>AI 工具使用現況調查・統計</h1>
       <p id="introText">管理人員專用。請輸入管理密碼查看統計結果。</p>
     </div>
   </section>
@@ -63,10 +63,11 @@
         <div class="table-wrap" id="c-tools"></div>
       </section>
 
-      <div class="grid-2 stack">
-        <section class="panel"><h2>目前用 AI 做的工作</h2><p class="panel-sub" id="sub-tasks"></p><div id="c-tasks"></div></section>
-        <section class="panel"><h2>希望 AI 協助的工作</h2><p class="panel-sub" id="sub-futureTasks"></p><div id="c-futureTasks"></div></section>
-      </div>
+      <section class="panel">
+        <h2>目前用 AI 做的工作</h2>
+        <p class="panel-sub" id="sub-tasks"></p>
+        <div id="c-tasks"></div>
+      </section>
 
       <section class="panel">
         <h2>資料安全</h2>
@@ -79,13 +80,6 @@
         <section class="panel"><h2>使用 AI 產出前是否查核</h2><p class="panel-sub" id="sub-verify"></p><div id="c-verify"></div></section>
         <section class="panel"><h2>使用裝置</h2><p class="panel-sub" id="sub-devices"></p><div id="c-devices"></div></section>
         <section class="panel"><h2>每週節省時間</h2><p class="panel-sub" id="sub-timeSaved"></p><div id="c-timeSaved"></div></section>
-      </div>
-
-      <div class="grid-2 stack">
-        <section class="panel"><h2>希望公司提供的工具</h2><p class="panel-sub" id="sub-wantTools"></p><div id="c-wantTools"></div></section>
-        <section class="panel"><h2>預計使用頻率</h2><p class="panel-sub" id="sub-wantFrequency"></p><div id="c-wantFrequency"></div></section>
-        <section class="panel"><h2>希望公司提供的支援</h2><p class="panel-sub" id="sub-support"></p><div id="c-support"></div></section>
-        <section class="panel"><h2>對 AI 管理方式的看法</h2><p class="panel-sub" id="sub-policy"></p><div id="c-policy"></div></section>
       </div>
 
       <section class="panel">
@@ -125,9 +119,9 @@
     </div>
   </footer>
 
-  <script src="assets/config.js?v=4"></script>
-  <script src="assets/schema.js?v=4"></script>
-  <script src="assets/common.js?v=4"></script>
-  <script src="assets/admin.js?v=4"></script>
+  <script src="assets/config.js?v=5"></script>
+  <script src="assets/schema.js?v=5"></script>
+  <script src="assets/common.js?v=5"></script>
+  <script src="assets/admin.js?v=5"></script>
 </body>
 </html>

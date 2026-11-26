@@ -387,8 +387,7 @@
     function row(k, v) { sum.appendChild(el('dt', { text: k })); sum.appendChild(el('dd', { text: v || '—' })); }
     row('目前使用情況', d.usage);
     if (d.tools.length) row('使用中的工具', d.tools.map(function (t) { return t.name + '（' + t.plan + '）'; }).join('、'));
-    row('希望公司提供', d.wantTools.concat(d.wantToolsOther ? [d.wantToolsOther] : []).join('、'));
-    row('希望的支援', d.support.concat(d.supportOther ? [d.supportOther] : []).join('、'));
+    if (d.tasks.length || d.tasksOther) row('用 AI 做的工作', d.tasks.concat(d.tasksOther ? [d.tasksOther] : []).join('、'));
     $('doneView').hidden = false;
     $('doneView').focus({ preventScroll: true });
     $('doneView').scrollIntoView({ behavior: 'smooth', block: 'start' });

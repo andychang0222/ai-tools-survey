@@ -6,7 +6,7 @@
 var SHEET_MAIN = '填答';
 var SHEET_TOOLS = '工具使用明細';
 var SHEET_HISTORY = '歷史紀錄';
-var MAIN_HEADERS = ['最後更新時間', '首次填寫時間', '部門', '姓名', '職務', '使用情況', '目前使用的工具', '希望公司提供', '其他意見', '原始資料（請勿修改）'];
+var MAIN_HEADERS = ['最後更新時間', '首次填寫時間', '部門', '姓名', '職務', '使用情況', '目前使用的工具', '原始資料（請勿修改）'];
 var TOOL_HEADERS = ['最後更新時間', '部門', '姓名', '工具', '方案', '是否付費', '費用支付', '登入帳號', '使用頻率'];
 var COL_JSON = MAIN_HEADERS.length;
 
@@ -16,7 +16,7 @@ var LOCKOUT_SECONDS = 900;
 /* ---------------- 進入點 ---------------- */
 
 function doGet() {
-  return ContentService.createTextOutput('AI 工具使用現況與需求調查：資料接收服務運作中（第 ' + SurveySchema.version + ' 版）。');
+  return ContentService.createTextOutput('AI 工具使用現況調查：資料接收服務運作中（第 ' + SurveySchema.version + ' 版）。');
 }
 
 function doPost(e) {
@@ -81,7 +81,6 @@ function handleSubmit_(raw) {
     data.schemaVersion = SurveySchema.version;
 
     var toolText = data.tools.map(function (t) { return t.name + '（' + t.plan + '）'; }).join('、');
-    var want = data.wantTools.concat(data.wantToolsOther ? [data.wantToolsOther] : []).join('、');
     var row = [
       now,
       new Date(firstTime),
@@ -90,8 +89,6 @@ function handleSubmit_(raw) {
       data.role,
       data.usage,
       sheetSafe_(toolText || '（無）'),
-      sheetSafe_(want),
-      sheetSafe_(data.comment),
       JSON.stringify(data)
     ];
 

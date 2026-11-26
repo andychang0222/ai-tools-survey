@@ -215,16 +215,11 @@
     chart('familiarity', rs, '全部填答');
     renderTools(users);
     chart('tasks', users, '目前使用者', { sort: true });
-    chart('futureTasks', rs, '全部填答', { sort: true });
     chart('dataTypes', users, '目前使用者', { risk: true });
     chart('trainingAware', users, '目前使用者');
     chart('verify', users, '目前使用者');
     chart('devices', users, '目前使用者', { sort: true });
     chart('timeSaved', users, '目前使用者');
-    chart('wantTools', rs, '全部填答', { sort: true });
-    chart('wantFrequency', rs.filter(function (r) { return !!r.wantFrequency; }), '希望公司提供工具的');
-    chart('support', rs, '全部填答', { sort: true });
-    chart('policy', rs, '全部填答');
     chart('notUsingReasons', nonUsers, '目前沒有使用的', { sort: true });
     renderDept(rs);
     renderTexts(rs);
@@ -263,12 +258,12 @@
     var depts = $('deptFilter').value ? [$('deptFilter').value] : deptList();
     var rows = depts.map(function (d) {
       var dr = rs.filter(function (r) { return r.dept === d; });
-      var want = {};
-      dr.forEach(function (r) { (r.wantTools || []).forEach(function (w) { if (w !== '目前不需要') want[w] = (want[w] || 0) + 1; }); });
-      var top = Object.keys(want).sort(function (a, b) { return want[b] - want[a]; })[0];
-      return { cells: [d, dr.length, dr.filter(isUser).length, dr.filter(usesPaid).length, dr.filter(personalAcct).length, dr.filter(hasSensitive).length, top ? top + '（' + want[top] + '）' : '—'], n: dr.length };
+      var used = {};
+      dr.forEach(function (r) { (r.tools || []).forEach(function (t) { used[t.name] = (used[t.name] || 0) + 1; }); });
+      var top = Object.keys(used).sort(function (a, b) { return used[b] - used[a]; })[0];
+      return { cells: [d, dr.length, dr.filter(isUser).length, dr.filter(usesPaid).length, dr.filter(personalAcct).length, dr.filter(hasSensitive).length, top ? top + '（' + used[top] + '）' : '—'], n: dr.length };
     });
-    var t = table(['部門', '填答', '使用 AI', '付費方案', '個人帳號', '曾輸入敏感資料', '最希望提供的工具'], rows.map(function (r) { return r.cells; }), 1);
+    var t = table(['部門', '填答', '使用 AI', '付費方案', '個人帳號', '曾輸入敏感資料', '最常用的工具'], rows.map(function (r) { return r.cells; }), 1);
     // 依「佔該部門填答人數的比例」上色（單一色系，越深比例越高）
     t.querySelectorAll('tbody tr').forEach(function (tr, i) {
       var n = rows[i].n;
@@ -287,19 +282,11 @@
   function renderTexts(rs) {
     var groups = [
       { title: 'AI 幫最多的實際例子', pick: function (r) { return r.example ? [r.example] : []; } },
-      { title: '其他意見或建議', pick: function (r) { return r.comment ? [r.comment] : []; } },
       { title: '自行填寫的其他工具', pick: function (r) {
-        return (r.tools || []).filter(function (t) { return t.other; }).map(function (t) { return '使用中：' + t.name + '（' + t.plan + '）'; })
-          .concat(r.wantToolsOther ? ['希望提供：' + r.wantToolsOther] : []);
+        return (r.tools || []).filter(function (t) { return t.other; }).map(function (t) { return t.name + '（' + t.plan + '）'; });
       } },
-      { title: '自行填寫的其他選項', pick: function (r) {
-        var out = [];
-        if (r.tasksOther) out.push('目前用途：' + r.tasksOther);
-        if (r.futureTasksOther) out.push('希望用途：' + r.futureTasksOther);
-        if (r.notUsingReasonsOther) out.push('沒使用原因：' + r.notUsingReasonsOther);
-        if (r.supportOther) out.push('希望支援：' + r.supportOther);
-        return out;
-      } }
+      { title: '自行填寫的其他用途', pick: function (r) { return r.tasksOther ? [r.tasksOther] : []; } },
+      { title: '自行填寫的其他未使用原因', pick: function (r) { return r.notUsingReasonsOther ? [r.notUsingReasonsOther] : []; } }
     ];
     var box = el('div', { className: 'grid-2' });
     groups.forEach(function (g) {
@@ -322,14 +309,13 @@
       return ((order[a.dept] !== undefined ? order[a.dept] : 999) - (order[b.dept] !== undefined ? order[b.dept] : 999)) || a.name.localeCompare(b.name, 'zh-Hant');
     });
     $('listCount').textContent = '共 ' + rs.length + ' 人。深色標籤為付費方案。';
-    put('c-list', table(['部門', '姓名', '職務', '使用情況', '使用中的工具', '敏感資料', '希望公司提供', '最後更新'], rs.map(function (r) {
+    put('c-list', table(['部門', '姓名', '職務', '使用情況', '使用中的工具', '敏感資料', '最後更新'], rs.map(function (r) {
       var tools = el('div', null, (r.tools || []).length ? r.tools.map(function (t) {
         return el('span', { className: 'tag' + (S.isPaidPlan(t.plan) ? ' paid' : ''), title: t.plan + '・' + (t.payer || '免費') + '・' + t.account + '・' + t.frequency, text: t.name + ' ' + t.plan });
       }) : [el('span', { className: 'empty', text: '—' })]);
       var sens = (r.dataTypes || []).filter(function (x) { return SENSITIVE.indexOf(x) >= 0; });
       var sensNode = sens.length ? el('span', { className: 'tag risk', title: sens.join('、'), text: sens.length + ' 類' }) : el('span', { className: 'empty', text: '—' });
-      var want = (r.wantTools || []).concat(r.wantToolsOther ? [r.wantToolsOther] : []).join('、');
-      return [r.dept, r.name, r.role, r.usage.replace('（每週數次以上）', ''), tools, sensNode, want, C.formatTime(r.time)];
+      return [r.dept, r.name, r.role, r.usage.replace('（每週數次以上）', ''), tools, sensNode, C.formatTime(r.time)];
     }), 99));
   }
 
