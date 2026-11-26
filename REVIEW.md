@@ -16,8 +16,8 @@
 _目前無進行中任務。_
 
 ## 待使用者完成
-- ⬜ 建立 Google 試算表、貼上 `Code.gs`、設定 `ADMIN_PASSWORD`、部署網頁應用程式（步驟見 README）
-- ⬜ 把部署網址填入 `assets/config.js` 的 `apiUrl` 並推送
+- ✅ 建立 Google 試算表、貼上 `Code.gs`、設定 `ADMIN_PASSWORD`、部署網頁應用程式（2026-11-26，GET／POST 連線測試正常）
+- ✅ 部署網址已填入 `assets/config.js` 的 `apiUrl` 並推送
 - ⬜ GitHub repo → Settings → Pages 開啟（main / root）
 
 ---

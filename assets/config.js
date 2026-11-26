@@ -5,7 +5,7 @@
  */
 window.SURVEY_CONFIG = {
   // Google Apps Script 網頁應用程式網址（以 https://script.google.com/macros/s/ 開頭，結尾為 /exec）
-  apiUrl: '',
+  apiUrl: 'https://script.google.com/macros/s/AKfycbwT1rLHhl1KlA0e7mOpDp2l91DINaUCoJlCtXELzKFj4GPtvWk5BmqCGAgoSs2yaz9f2A/exec',
 
   companyZh: '八貫企業股份有限公司',
   companyEn: 'Cathay Consolidated, Inc',
